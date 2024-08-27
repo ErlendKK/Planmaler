@@ -8,6 +8,7 @@ export default defineConfig({
     include: ["pdfjs-dist"],
   },
   build: {
+    outDir: "docs",
     commonjsOptions: {
       include: [/node_modules/],
     },

@@ -11,9 +11,13 @@
 }
 
 .Fieldset legend {
-  font-weight: 600;
+  font-weight: 630;
   font-size: 16px;
-  color: var(--mantine-color-primary-9, #378566);
+  color: var(--mantine-color-customPrimary-8);
+}
+
+.maxWidthContainer {
+  max-width: 400px;
 }
 
 .dropzone {
@@ -21,7 +25,3 @@
   justify-content: center;
   align-items: center;
 }
-
-/* .icon {
-  color: light-dark(var(--mantine-color-gray-4), var(--mantine-color-dark-3));
-} */

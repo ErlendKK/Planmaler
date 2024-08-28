@@ -1,3 +1,5 @@
+import { TEST_POINT_OFFSET, ORIENTATION_TOLERANCE } from "../constants/line-drawer-constants";
+
 /**
  * Determines the direction of diagonal lines
  * @param {Object} start - Start point of the line
@@ -26,7 +28,7 @@ function getDiagonalDirection(start, end) {
  * @param {number} dy - Difference in y coordinates
  * @returns {string} Line type
  */
-const getLineType = (dx, dy, ORIENTATION_TOLERANCE) => {
+const getLineType = (dx, dy) => {
   if (Math.abs(dx) > Math.abs(dy) * ORIENTATION_TOLERANCE) {
     return "horizontal";
   } else if (Math.abs(dy) > Math.abs(dx) * ORIENTATION_TOLERANCE) {
@@ -115,6 +117,67 @@ function getDrawingDirection(points) {
 }
 
 /**
+ * Handles orientation for vertical and horizontal lines
+ * @param {Object} midPoint - Midpoint of the line
+ * @param {string} lineType - Type of line
+ * @param {Array} polygon - Array of points forming the polygon
+ * @returns {number} Angle of the line
+ */
+const handleVerticalAndHorizontalLines = (midPoint, lineType, polygon) => {
+  // Horizontal: if the point is inside the polygon, the line faces North, otherwise South
+  if (lineType === "horizontal") {
+    const testPoint = { x: midPoint.x, y: midPoint.y + TEST_POINT_OFFSET };
+    return isPointInPolygon(testPoint, polygon) ? 0 : 180;
+  }
+  // Vertical: if the point is inside the polygon, the line faces West, otherwise East
+  const testPoint = { x: midPoint.x + TEST_POINT_OFFSET, y: midPoint.y };
+  return isPointInPolygon(testPoint, polygon) ? 270 : 90;
+};
+
+/**
+ * Determines the orientation of a line segment
+ * @param {Object} startPoint - Start point of the line
+ * @param {Object} endPoint - End point of the line
+ * @param {Array} polygon - Array of points forming the polygon
+ * @returns {number} Angle of the line segment
+ */
+const determineOrientation = (startPoint, endPoint, polygon, roundAngleTo) => {
+  let angle;
+  const dx = endPoint.x - startPoint.x;
+  const dy = endPoint.y - startPoint.y;
+  const length = Math.sqrt(dx * dx + dy * dy);
+
+  const midPoint = {
+    x: (startPoint.x + endPoint.x) / 2,
+    y: (startPoint.y + endPoint.y) / 2,
+  };
+
+  const lineType = getLineType(dx, dy);
+
+  //Handle horizontal and vertical lines separately
+  if (lineType === "horizontal" || lineType === "vertical") {
+    angle = handleVerticalAndHorizontalLines(midPoint, lineType, polygon);
+  } else {
+    // Handle diagonal lines
+    const perpendicularDx = -dy / length;
+    const perpendicularDy = dx / length;
+    const drawingDirection = getDrawingDirection(polygon);
+    const angleOffset = drawingDirection === "clockwise" ? 90 : -90;
+    console.log("Drawing direction:", drawingDirection);
+
+    // Calculate the angle of the perpendicular line and normalize to 0-360 degrees
+    angle = Math.atan2(perpendicularDy, perpendicularDx) * (180 / Math.PI);
+    angle = (angle + 360 - angleOffset) % 360;
+    while (angle < 0) angle += 360;
+    while (angle >= 360) angle -= 360;
+  }
+
+  // Round the angle
+  const roundedAngle = roundAngle(angle, roundAngleTo);
+  return roundedAngle;
+};
+
+/**
  * Calculates the area of a polygon from line segments
  * @param {Array} lines - Array of line segment coordinates
  * @returns {number} The calculated area
@@ -184,4 +247,5 @@ export {
   getDrawingDirection,
   calculatePolygonAreaFromLines,
   roundAngle,
+  determineOrientation,
 };

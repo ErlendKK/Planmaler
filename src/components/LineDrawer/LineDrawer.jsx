@@ -1,24 +1,17 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useRef, useState, useCallback, useEffect } from "react";
 import { Stage, Container, Text, Graphics, Sprite } from "@pixi/react";
-import { TextStyle, Texture, Graphics as PIXIGraphics } from "pixi.js";
-import {
-  getLineType,
-  calculateLength,
-  isPointInPolygon,
-  getDrawingDirection,
-  roundAngle,
-} from "../../utils/geometry";
-import { lighten } from "@mantine/core";
+import { TextStyle, Texture } from "pixi.js";
+import { calculateLength, determineOrientation } from "../../utils/geometry";
+import { lighten, Button, Flex } from "@mantine/core";
+import { IconDownload } from "@tabler/icons-react";
 
 // Constants
-const SNAP_DISTANCE = 5; // Distance in pixels for snapping
-const TEST_POINT_OFFSET = 1; // Offset for test point in point-in-polygon calculation
-const ORIENTATION_TOLERANCE = 35; // Tolerance for nearly vertical/horizontal lines
-const NUMBER_OF_DECIMALS = 1; // Number of decimals for length
-const MAX_CANVAS_WIDTH = 800; // Maximum width of the canvas
-const MAX_CANVAS_HEIGHT = 600; // Maximum height of the canvas
-const MIN_CALIBRATION_LENGTH = 5; // Minimum length in pixels
-const CLICK_SENSITIVITY = 5;
+import {
+  MAX_CANVAS_WIDTH,
+  MAX_CANVAS_HEIGHT,
+  SNAP_DISTANCE,
+  NUMBER_OF_DECIMALS,
+} from "../../constants/line-drawer-constants.js";
 
 /**
  * LineDrawer Component
@@ -34,8 +27,8 @@ const LineDrawer = ({
   drawingColor,
   isCalibrationMode,
   onCalibrationComplete,
-  calibrationLineVisible,
   knownMeasurement,
+  provideDownloadAccess,
 }) => {
   // State declarations
   const [points, setPoints] = useState([]);
@@ -43,14 +36,35 @@ const LineDrawer = ({
   const [snappedPosition, setSnappedPosition] = useState(null);
   const [message, setMessage] = useState("Klikk for å markere første punkt");
   const [distance, setDistance] = useState(0);
-  const [angle, setAngle] = useState(null); // NB! Ikke i bruk lenger. Vurder å droppe.
   const [isDrawing, setIsDrawing] = useState(true);
   const [backgroundTexture, setBackgroundTexture] = useState(null);
   const [canvasSize, setCanvasSize] = useState({ width: 400, height: 300 });
   const [isFinished, setIsFinished] = useState(false);
-
   const [calibrationPoints, setCalibrationPoints] = useState([]);
-  const [calibrationLineLength, setCalibrationLineLength] = useState(0);
+  const [lineNumbers, setLineNumbers] = useState([]);
+
+  const stageRef = useRef(null); // For downloading the canvas as an image
+
+  const downloadImage = () => {
+    if (stageRef.current) {
+      const app = stageRef.current.app;
+      const renderer = app.renderer;
+
+      // Render the stage to a canvas
+      const extractedCanvas = renderer.extract.canvas(app.stage);
+
+      // Convert the canvas to a data URL
+      const dataURL = extractedCanvas.toDataURL("image/png");
+
+      // Create a temporary anchor element and trigger download
+      const link = document.createElement("a");
+      link.href = dataURL;
+      link.download = "drawing_with_background.png";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
 
   // Effect for setting background image and resizing canvas to its aspect ratio
   useEffect(() => {
@@ -66,6 +80,26 @@ const LineDrawer = ({
       img.src = URL.createObjectURL(image);
     }
   }, [image]);
+
+  /**
+   * Used to pass the canvas data to the parent component for image download
+   */
+  const getCanvasData = useCallback(() => {
+    if (stageRef.current) {
+      const app = stageRef.current.app;
+      const renderer = app.renderer;
+      const extractedCanvas = renderer.extract.canvas(app.stage);
+      return extractedCanvas.toDataURL("image/png");
+    }
+    return null;
+  }, []);
+
+  // Provide download access to parent component
+  useEffect(() => {
+    if (provideDownloadAccess) {
+      provideDownloadAccess(getCanvasData);
+    }
+  }, [provideDownloadAccess, getCanvasData]);
 
   /**
    * Calculates new canvas dimensions to maintain the aspect ratio of the image
@@ -108,9 +142,9 @@ const LineDrawer = ({
   const resetDrawing = () => {
     setPoints([]);
     setIsDrawing(true);
+    setIsFinished(false);
     setMessage("Klikk for å sette første punkt");
     setDistance(0);
-    setAngle(null);
   };
 
   /**
@@ -125,7 +159,6 @@ const LineDrawer = ({
       if (newPoints.length === 0) {
         setMessage("Klikk for å sette første punkt");
         setDistance(0);
-        setAngle(null);
       } else {
         setMessage("Press Enter for å fullføre");
         // Recalculate distance and angle if there are still points
@@ -137,7 +170,6 @@ const LineDrawer = ({
           setDistance((Math.sqrt(dx * dx + dy * dy) * metersPerPixel).toFixed(NUMBER_OF_DECIMALS));
         } else {
           setDistance(0);
-          setAngle(null);
         }
       }
     }
@@ -187,17 +219,16 @@ const LineDrawer = ({
   };
 
   /**
-   * Ends the drawing process and calculates final segments
+   * Beregner segmenter basert på nåværende punkter.
+   * @returns {Array} Et array av segmenter med lengde, vinkel, start- og sluttpunkt.
    */
-  const endDrawing = () => {
-    setIsDrawing(false);
-    setIsFinished(true);
-    setMessage("Tegning er ferdig. Press Esc for å tegne en ny sone");
+  const calculateSegments = () => {
+    if (points.length < 2) return [];
 
     const segments = points.slice(1).map((endPoint, index) => {
       const startPoint = points[index];
       const length = calculateLength(startPoint, endPoint, metersPerPixel);
-      const angle = determineOrientation(startPoint, endPoint, points);
+      const angle = determineOrientation(startPoint, endPoint, points, roundAngleTo);
 
       return {
         length: Number(length.toFixed(1)),
@@ -207,11 +238,18 @@ const LineDrawer = ({
       };
     });
 
-    const filteredSegments = segments.filter((segment) => segment.length > 0);
+    return segments.filter((segment) => segment.length > 0);
+  };
 
-    if (onDrawingComplete) {
-      onDrawingComplete(filteredSegments);
-    }
+  /**
+   * Ends the drawing process and calculates final segments
+   */
+  const endDrawing = () => {
+    const segments = calculateSegments();
+    onDrawingComplete(segments);
+    setIsDrawing(false);
+    setIsFinished(true);
+    setMessage("Tegning utført. Press Esc for å begynne forfra");
   };
 
   /**
@@ -234,22 +272,6 @@ const LineDrawer = ({
       const dx = targetPoint.x - lastPoint.x;
       const dy = targetPoint.y - lastPoint.y;
       setDistance((Math.sqrt(dx * dx + dy * dy) * metersPerPixel).toFixed(NUMBER_OF_DECIMALS));
-
-      // Calculate angle if there are at least two points
-      if (points.length > 1) {
-        const prevPoint = points[points.length - 2];
-        const prevDx = lastPoint.x - prevPoint.x;
-        const prevDy = lastPoint.y - prevPoint.y;
-        const newDx = targetPoint.x - lastPoint.x;
-        const newDy = targetPoint.y - lastPoint.y;
-
-        let newAngle = Math.atan2(newDy, newDx) - Math.atan2(prevDy, prevDx);
-        newAngle = (newAngle * 180) / Math.PI; // Convert to degrees
-        if (newAngle < 0) newAngle += 360; // Ensure positive angle
-        setAngle(newAngle.toFixed(0));
-      } else {
-        setAngle(null);
-      }
     }
   };
 
@@ -270,57 +292,6 @@ const LineDrawer = ({
     return null;
   };
 
-  const handleLineClick = useCallback(
-    (index) => {
-      if (isFinished && index < points.length - 1) {
-        const startPoint = points[index];
-        const endPoint = points[index + 1];
-        const length = calculateLength(startPoint, endPoint, metersPerPixel);
-        const angle = determineOrientation(startPoint, endPoint, points);
-        console.log(`Clicked line ${index + 1}: Length = ${length.toFixed(1)}m, Angle = ${angle}°`);
-      }
-    },
-    [isFinished, points, metersPerPixel, roundAngleTo]
-  );
-
-  /**
-   * Creates a line segment graphics object
-   * @param {Object} startPoint - The start point of the line
-   * @param {Object} endPoint - The end point of the line
-   * @returns {PIXI.Graphics} The created line segment
-   */
-  const createLineSegment = (startPoint, endPoint) => {
-    const lineSegment = new PIXIGraphics();
-    lineSegment.lineStyle(3, drawingColor);
-    lineSegment.moveTo(startPoint.x, startPoint.y);
-    lineSegment.lineTo(endPoint.x, endPoint.y);
-    return lineSegment;
-  };
-
-  /**
-   * Makes a line segment interactive
-   * @param {PIXI.Graphics} lineSegment - The line segment to make interactive
-   * @param {number} index - The index of the line segment
-   * @param {Object} startPoint - The start point of the line
-   * @param {Object} endPoint - The end point of the line
-   */
-  const makeLinesInteractive = (lineSegment, index, startPoint, endPoint) => {
-    lineSegment.interactive = true;
-    lineSegment.buttonMode = true;
-    lineSegment.hitArea = {
-      contains: (x, y) => {
-        const A = startPoint;
-        const B = endPoint;
-        const C = { x, y };
-        const distanceFromLine =
-          Math.abs((B.y - A.y) * C.x - (B.x - A.x) * C.y + B.x * A.y - B.y * A.x) /
-          Math.sqrt((B.y - A.y) ** 2 + (B.x - A.x) ** 2);
-        return distanceFromLine < CLICK_SENSITIVITY;
-      },
-    };
-    lineSegment.on("pointerdown", () => handleLineClick(index));
-  };
-
   /**
    * Draws the lines and points on the canvas
    */
@@ -328,21 +299,13 @@ const LineDrawer = ({
     (g) => {
       g.clear();
 
-      // Remove all children (previous line segments)
-      while (g.children[0]) {
-        g.removeChild(g.children[0]);
-      }
-
       // Create a new PIXI.Graphics object for each line segment
-      // Make the line segment interactive if drawing is finished
       for (let i = 1; i < points.length; i++) {
         const startPoint = points[i - 1];
         const endPoint = points[i];
-        const lineSegment = createLineSegment(startPoint, endPoint);
-        if (isFinished) makeLinesInteractive(lineSegment, i - 1, startPoint, endPoint);
-
-        // Add the line segment to the main graphics object
-        g.addChild(lineSegment);
+        g.lineStyle(3, drawingColor);
+        g.moveTo(startPoint.x, startPoint.y);
+        g.lineTo(endPoint.x, endPoint.y);
       }
 
       // Draw line from last point to cursor if still drawing
@@ -352,16 +315,16 @@ const LineDrawer = ({
         g.lineStyle(3, lighten(drawingColor, 0.1));
         g.moveTo(lastPoint.x, lastPoint.y);
         g.lineTo(targetPoint.x, targetPoint.y);
+
+        // Draw snapping indicator only when drawing is in progress
+        if (snappedPosition) {
+          g.lineStyle(3, 0xff0000);
+          g.drawCircle(snappedPosition.x, snappedPosition.y, 5);
+        }
       }
 
-      // Draw snapping indicator
-      if (snappedPosition) {
-        g.lineStyle(3, 0xff0000);
-        g.drawCircle(snappedPosition.x, snappedPosition.y, 5);
-      }
-
-      // Draw calibration line if in calibration mode and visible
-      if (isCalibrationMode && calibrationLineVisible && calibrationPoints.length) {
+      // Draw calibration line if calibration mode is active
+      if (isCalibrationMode && calibrationPoints.length > 0) {
         g.lineStyle(3, 0xa2c3b3); // Green color for calibration line
         g.moveTo(calibrationPoints[0].x, calibrationPoints[0].y);
         if (calibrationPoints.length > 1) {
@@ -376,15 +339,15 @@ const LineDrawer = ({
       cursorPosition,
       isDrawing,
       snappedPosition,
-      isFinished,
-      handleLineClick,
       drawingColor,
       isCalibrationMode,
-      calibrationLineVisible,
       calibrationPoints,
     ]
   );
 
+  /**
+   * Handles clicks during calibration mode
+   */
   const handleCalibrationClick = (event) => {
     const newPoint = snappedPosition || {
       x: event.nativeEvent.offsetX,
@@ -393,7 +356,7 @@ const LineDrawer = ({
 
     if (calibrationPoints.length === 0) {
       setCalibrationPoints([newPoint]);
-      setMessage("Click to set the end point of the calibration line");
+      setMessage("Klikk for å sette sluttpunktet for kalibreringslinen");
     } else if (calibrationPoints.length === 1) {
       const startPoint = calibrationPoints[0];
       const endPoint = newPoint;
@@ -401,89 +364,32 @@ const LineDrawer = ({
         Math.pow(endPoint.x - startPoint.x, 2) + Math.pow(endPoint.y - startPoint.y, 2)
       );
 
-      if (pixelLength < MIN_CALIBRATION_LENGTH) {
-        setMessage(
-          `Calibration line too short. Minimum length is ${MIN_CALIBRATION_LENGTH} pixels.`
-        );
-        // TODO: reset the calibration points
-      } else {
-        setCalibrationLineLength(pixelLength);
-        setCalibrationPoints([startPoint, endPoint]);
+      const newMetersPerPixel = knownMeasurement / pixelLength;
+      onCalibrationComplete(newMetersPerPixel);
 
-        const newLengthMultiplier = knownMeasurement / pixelLength;
-        onCalibrationComplete(newLengthMultiplier);
-        setMessage("Calibration complete. You can now start drawing.");
+      setCalibrationPoints([]);
+      setMessage("Kalibrering utført. Du kan begynne å tegne.");
+    }
+  };
+
+  // Effect to update line numbers when drawing is finished
+  useEffect(() => {
+    if (isFinished && points.length > 1) {
+      const numbers = [];
+      for (let i = 1; i < points.length; i++) {
+        const startPoint = points[i - 1];
+        const endPoint = points[i];
+        const midPoint = {
+          x: (startPoint.x + endPoint.x) / 2,
+          y: (startPoint.y + endPoint.y) / 2,
+        };
+        numbers.push({ number: i, x: midPoint.x, y: midPoint.y });
       }
-    }
-  };
-
-  /***************************************************************
-   *  FIND THE ORIENTATION OF EACH LINE IN A COMPLETED POLYGON ***
-   ***************************************************************/
-
-  /**
-   * Handles orientation for vertical and horizontal lines
-   * @param {Object} midPoint - Midpoint of the line
-   * @param {string} lineType - Type of line
-   * @param {Array} polygon - Array of points forming the polygon
-   * @returns {number} Angle of the line
-   */
-  const handleVerticalAndHorizontalLines = (midPoint, lineType, polygon) => {
-    // Horizontal: if the point is inside the polygon, the line faces North, otherwise South
-    if (lineType === "horizontal") {
-      const testPoint = { x: midPoint.x, y: midPoint.y + TEST_POINT_OFFSET };
-      return isPointInPolygon(testPoint, polygon) ? 0 : 180;
-    }
-    // Vertical: if the point is inside the polygon, the line faces West, otherwise East
-    const testPoint = { x: midPoint.x + TEST_POINT_OFFSET, y: midPoint.y };
-    return isPointInPolygon(testPoint, polygon) ? 270 : 90;
-  };
-
-  /**
-   * Determines the orientation of a line segment
-   * @param {Object} startPoint - Start point of the line
-   * @param {Object} endPoint - End point of the line
-   * @param {Array} polygon - Array of points forming the polygon
-   * @returns {number} Angle of the line segment
-   */
-  const determineOrientation = (startPoint, endPoint, polygon) => {
-    let angle;
-    const dx = endPoint.x - startPoint.x;
-    const dy = endPoint.y - startPoint.y;
-    const length = Math.sqrt(dx * dx + dy * dy);
-
-    const midPoint = {
-      x: (startPoint.x + endPoint.x) / 2,
-      y: (startPoint.y + endPoint.y) / 2,
-    };
-
-    const lineType = getLineType(dx, dy, ORIENTATION_TOLERANCE);
-    console.log("Line type:", lineType);
-
-    //Handle horizontal and vertical lines separately
-    if (lineType === "horizontal" || lineType === "vertical") {
-      angle = handleVerticalAndHorizontalLines(midPoint, lineType, polygon);
+      setLineNumbers(numbers);
     } else {
-      // Handle diagonal lines
-      const perpendicularDx = -dy / length;
-      const perpendicularDy = dx / length;
-      const drawingDirection = getDrawingDirection(polygon);
-      const angleOffset = drawingDirection === "clockwise" ? 90 : -90;
-      console.log("Drawing direction:", drawingDirection);
-
-      // Calculate the angle of the perpendicular line and normalize to 0-360 degrees
-      angle = Math.atan2(perpendicularDy, perpendicularDx) * (180 / Math.PI);
-      angle = (angle + 360 - angleOffset) % 360;
-      while (angle < 0) angle += 360;
-      while (angle >= 360) angle -= 360;
-      console.log("Perpendicular angle (before normalization):", angle);
+      setLineNumbers([]);
     }
-
-    // Round the angle
-    const roundedAngle = roundAngle(angle, roundAngleTo);
-    console.log("Original angle:", angle, "Rounded angle:", roundedAngle);
-    return roundedAngle;
-  };
+  }, [isFinished, points]);
 
   // TextStyle-factory for Pixi Text elements
   const getTextStyle = (fontSize = 16) =>
@@ -491,45 +397,65 @@ const LineDrawer = ({
       fill: 0xffffff,
       fontSize,
       fontFamily: "Arial",
+      stroke: 0x000000,
+      strokeThickness: 3,
     });
 
   return (
-    <Stage
-      width={canvasSize.width}
-      height={canvasSize.height}
-      options={{ backgroundColor: 0x1099bb, interactive: true }}
-      onClick={isFinished ? undefined : handleClick}
-      onMouseMove={isFinished ? undefined : handleMouseMove}
-    >
-      <Container>
-        {backgroundTexture && (
-          <Sprite
-            texture={backgroundTexture}
-            width={canvasSize.width}
-            height={canvasSize.height}
-            x={0}
-            y={0}
-          />
-        )}
-        <Graphics draw={draw} />
-        <Text
-          text={message}
-          x={canvasSize.width / 2}
-          y={canvasSize.height - 20}
-          anchor={0.5}
-          style={getTextStyle()}
-        />
-        {isDrawing && points.length > 0 && (
+    <Flex direction="column" gap="xs" justify="center" align="center">
+      {/* {isFinished && (
+        <Button onClick={downloadImage} leftSection={<IconDownload size="1rem" />}>
+          Last ned bilde
+        </Button>
+      )} */}
+      <Stage
+        ref={stageRef}
+        width={canvasSize.width}
+        height={canvasSize.height}
+        options={{ backgroundColor: 0x1099bb, interactive: true }}
+        onClick={handleClick}
+        onMouseMove={handleMouseMove}
+      >
+        <Container>
+          {backgroundTexture && (
+            <Sprite
+              texture={backgroundTexture}
+              width={canvasSize.width}
+              height={canvasSize.height}
+              x={0}
+              y={0}
+            />
+          )}
+          <Graphics draw={draw} />
+          {lineNumbers.map((lineNumber) => (
+            <Text
+              key={lineNumber.number}
+              text={lineNumber.number.toString()}
+              x={lineNumber.x}
+              y={lineNumber.y}
+              anchor={0.5}
+              style={getTextStyle(22)}
+            />
+          ))}
           <Text
-            text={`Avstand: ${distance}`}
+            text={message}
             x={canvasSize.width / 2}
-            y={20}
-            anchor={[0.5, 0]}
-            style={getTextStyle(14)}
+            y={canvasSize.height - 20}
+            anchor={0.5}
+            style={getTextStyle()}
           />
-        )}
-      </Container>
-    </Stage>
+          {isDrawing && points.length > 0 && (
+            <Text
+              text={`Avstand: ${distance}`}
+              x={canvasSize.width / 2}
+              y={20}
+              anchor={[0.5, 0]}
+              style={getTextStyle(14)}
+            />
+          )}
+        </Container>
+      </Stage>
+    </Flex>
   );
 };
 

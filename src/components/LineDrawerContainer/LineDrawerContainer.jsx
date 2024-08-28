@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Container,
   Text,
@@ -6,7 +6,6 @@ import {
   Grid,
   Flex,
   NumberInput,
-  Title,
   rem,
   Group,
   Fieldset,
@@ -14,21 +13,23 @@ import {
   Button,
   Space,
   ColorInput,
-  Checkbox,
+  LoadingOverlay,
   useMantineTheme,
 } from "@mantine/core";
 import { Dropzone, MIME_TYPES } from "@mantine/dropzone";
+import { useDisclosure } from "@mantine/hooks";
 import "@mantine/dropzone/styles.css";
-import { IconUpload, IconPhoto, IconX } from "@tabler/icons-react";
-import styles from "./LineDrawerContainer.module.css";
+import { IconUpload, IconPhoto, IconX, IconAdjustments } from "@tabler/icons-react";
+
 import * as pdfjsLib from "pdfjs-dist";
-// import "pdfjs-dist/build/pdf.worker.entry";
 import("pdfjs-dist/build/pdf.worker.min.mjs").then(() => {
   console.log("PDF worker loaded");
 });
 
 import LineDrawer from "../LineDrawer";
 import ResultsTable from "../ResultsTable";
+import styles from "./LineDrawerContainer.module.css";
+import { DEFAULT_COLORS, FILE_SIZE_THRESHOLD } from "../../constants/line-drawer-constants";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
@@ -36,19 +37,23 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.j
 
 const LineDrawerContainer = () => {
   const theme = useMantineTheme();
-
+  const [isLoading, { open: openLoading, close: closeLoading }] = useDisclosure(false);
+  // User inputs
   const [imageFile, setImageFile] = useState(null);
-  const [lineSegments, setLineSegments] = useState([]);
-  const [errors, setErrors] = useState([]);
   const [metersPerPixel, setMetersPerPixel] = useState(0.15);
   const [roundAngleTo, setRoundAngleTo] = useState("90");
   const [roofHeight, setRoofHeight] = useState(2.7);
   const [drawingColor, setDrawingColor] = useState(theme.colors.customPrimary[7]);
   const [angleAdjustment, setAngleAdjustment] = useState(0);
-
+  // Other state variables
+  const [lineSegments, setLineSegments] = useState([]);
+  const [isFinished, setIsFinished] = useState(false);
+  const [getCanvasData, setGetCanvasData] = useState(null);
+  const [errors, setErrors] = useState([]);
   const [isCalibrationMode, setIsCalibrationMode] = useState(false);
+  const [isCalibrationDone, setIsCalibrationDone] = useState(false);
+  const [previousMetersPerPixel, setPreviousMetersPerPixel] = useState(null);
   const [knownMeasurement, setKnownMeasurement] = useState(1);
-  const [calibrationLineVisible, setCalibrationLineVisible] = useState(true);
 
   /**
    * Håndterer fullføring av tegning
@@ -56,14 +61,41 @@ const LineDrawerContainer = () => {
    */
   const handleDrawingComplete = useCallback(
     (segments) => {
+      console.log("Drawing completed, segments:", segments);
       const segmentsWithArea = segments.map((segment) => ({
         ...segment,
         area: segment.length * roofHeight,
       }));
       setLineSegments(segmentsWithArea);
+      setIsFinished(true);
+      console.log("isFinished set to true");
     },
     [roofHeight]
   );
+
+  useEffect(() => {
+    console.log("isFinished changed:", isFinished);
+  }, [isFinished]);
+
+  // Function to receive download access from LineDrawer
+  const handleProvideDownloadAccess = useCallback((getDataFunction) => {
+    setGetCanvasData(() => getDataFunction);
+  }, []);
+
+  // Function to handle download button click
+  const handleDownload = useCallback(() => {
+    if (getCanvasData) {
+      const dataURL = getCanvasData();
+      if (dataURL) {
+        const link = document.createElement("a");
+        link.href = dataURL;
+        link.download = "drawing_with_background.png";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    }
+  }, [getCanvasData]);
 
   /***********************************
    *****   HANDLE INPUT FILE   *******
@@ -77,45 +109,54 @@ const LineDrawerContainer = () => {
     setErrors(errorList);
   }, []);
 
+  /**
+   * Converts the first page of a PDF file to a PNG image.
+   * @param {File} file - The PDF file to convert.
+   * @returns {Promise<Blob>} A promise that resolves with a Blob containing the PNG image.
+   * */
   const convertPdfToImage = async (file) => {
-    console.log("Starting PDF conversion");
-    const arrayBuffer = await file.arrayBuffer();
-    console.log("File converted to ArrayBuffer");
+    // Display LoadingOverlay while converting large files
+    if (file.size > FILE_SIZE_THRESHOLD) {
+      openLoading();
+    }
+    try {
+      console.log("Starting PDF conversion");
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
 
-    const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-    console.log("PDF document loaded");
+      const page = await pdf.getPage(1);
+      const scale = 1.5;
+      const viewport = page.getViewport({ scale });
 
-    const page = await pdf.getPage(1);
-    const scale = 1.5;
-    const viewport = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      console.log("Canvas created with size:", canvas.width, canvas.height);
 
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d");
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
-    console.log("Canvas created with size:", canvas.width, canvas.height);
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport,
+      };
 
-    const renderContext = {
-      canvasContext: context,
-      viewport: viewport,
-    };
+      await page.render(renderContext).promise;
 
-    await page.render(renderContext).promise;
-    console.log("Page rendered to canvas");
-
-    return new Promise((resolve) => {
-      canvas.toBlob((blob) => {
-        console.log("Canvas converted to blob");
-        resolve(blob);
-      }, "image/png");
-    });
+      return new Promise((resolve) => {
+        canvas.toBlob((blob) => {
+          resolve(blob);
+        }, "image/png");
+      });
+    } finally {
+      if (file.size > FILE_SIZE_THRESHOLD) {
+        closeLoading();
+      }
+    }
   };
 
   const handleFileDrop = async (files) => {
     if (files.length <= 0) return;
 
     const file = files[0];
-    console.log("File dropped:", file.name, file.type);
     try {
       let imageBlob;
       let isPdf = false;
@@ -128,9 +169,7 @@ const LineDrawerContainer = () => {
         imageBlob = file;
       }
 
-      console.log("Image blob created:", imageBlob);
       const imageUrl = URL.createObjectURL(imageBlob);
-      console.log("Image URL created:", imageUrl);
       setImageFile({ file: imageBlob, url: imageUrl, isPdf, name: file.name });
       console.log("ImageFile state updated");
     } catch (error) {
@@ -153,35 +192,51 @@ const LineDrawerContainer = () => {
    ********************************/
 
   /**
-   * Starts the calibration process.
-   * Sets the calibration mode to true and resets any existing calibration data.
+   * Initiates or restarts the calibration process.
+   * Stores the previous version of the metersPerPixel value.
    */
   const startCalibration = () => {
     if (!imageFile) {
       console.warn("Kalibrering kan ikke starte før plantegningen er lastet opp");
       return;
     }
+
+    setPreviousMetersPerPixel(metersPerPixel);
     setIsCalibrationMode(true);
-    // TODO: Reset any existing calibration data if necessary
-    // TODO: add more reset logic?
+    console.log("Kalibrering startet. Tidligere skala:", metersPerPixel);
   };
 
   /**
    * Handles the completion of the calibration process.
-   * @param {number} newMetersPerPixel - The newly calculated length multiplier
+   * Adjusts existing measurements based on the new calibration if necessary.
+   * @param {number} newMetersPerPixel - The newly calculated meters per pixel value
    */
-  const handleCalibrationComplete = useCallback((newMetersPerPixel) => {
-    setMetersPerPixel(newMetersPerPixel);
-    setIsCalibrationMode(false);
-    // TODO: add a success message
-  }, []);
+  const handleCalibrationComplete = useCallback(
+    (newMetersPerPixel) => {
+      // scaleFactor represents how much our measurements need to be adjusted
+      const scaleFactor = newMetersPerPixel / previousMetersPerPixel;
 
-  /**
-   * Toggles the visibility of the calibration line.
-   */
-  const toggleCalibrationLineVisibility = () => {
-    setCalibrationLineVisible((prev) => !prev);
-  };
+      // Update existing measurements if there are any
+      if (lineSegments.length > 0) {
+        const updatedSegments = lineSegments.map((segment) => ({
+          ...segment,
+          length: segment.length * scaleFactor,
+          area: segment.area * scaleFactor,
+        }));
+        setLineSegments(updatedSegments);
+      }
+
+      setMetersPerPixel(newMetersPerPixel);
+      setIsCalibrationMode(false);
+      setPreviousMetersPerPixel(null);
+      setIsCalibrationDone(true);
+
+      console.log(
+        `Kalibrering fullført. Ny skala: ${newMetersPerPixel} Skala faktor: ${scaleFactor}`
+      );
+    },
+    [lineSegments, previousMetersPerPixel]
+  );
 
   const ImageDropZone = () => {
     return (
@@ -192,6 +247,7 @@ const LineDrawerContainer = () => {
         accept={[MIME_TYPES.pdf, MIME_TYPES.png, MIME_TYPES.jpeg]}
         h={200}
         mt="md"
+        mb="md"
         className={styles.dropzone}
       >
         <Group justify="center" gap="xl" mih={220} style={{ pointerEvents: "none" }}>
@@ -229,206 +285,173 @@ const LineDrawerContainer = () => {
 
   return (
     <Container className={styles.LineDrawerContainer} radius={10}>
-      {/* <Title weight={700}>Mål Plantegning</Title> */}
-      <Space h="lg" />
+      <Box pos="relative">
+        <LoadingOverlay
+          visible={isLoading}
+          zIndex={1000}
+          overlayProps={{ radius: "sm", blur: 2 }}
+          loaderProps={{ color: theme.colors.customPrimary[7], type: "bars" }}
+        />
+        <Space h="lg" />
+        <ImageDropZone />
 
-      <ImageDropZone />
-
-      <Fieldset legend="Kalibrer Målestokk" mb="lg" className={styles.Fieldset}>
-        <Grid gutter="md">
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <NumberInput
-              label="Verdi til kalibrering (m)"
-              value={knownMeasurement}
-              onChange={(value) => setKnownMeasurement(value)}
-              precision={2}
-              step={0.1}
-              min={0.1}
-              styles={{
-                root: {
-                  maxWidth: "400px",
-                },
-              }}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <NumberInput
-              label="Målestokk (m/px)"
-              value={metersPerPixel.toFixed(4)}
-              onChange={(value) => {
-                if (!isCalibrationMode) {
-                  setMetersPerPixel(value);
-                }
-              }}
-              precision={2}
-              step={0.01}
-              min={0.01}
-              max={10}
-              readOnly={isCalibrationMode}
-              styles={{
-                root: {
-                  maxWidth: "400px",
-                },
-                input: {
-                  backgroundColor: isCalibrationMode ? "var(--mantine-color-gray-1)" : undefined,
-                },
-              }}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <Flex
-              align="end"
-              gap="xs"
-              styles={{
-                root: {
-                  maxWidth: "400px",
-                },
-              }}
-            >
-              <Button
-                onClick={startCalibration}
-                variant="outline"
-                disabled={isCalibrationMode}
+        {/* Fieldset for kalibrering */}
+        <Fieldset legend="Kalibrer Målestokk" mb="lg" className={styles.Fieldset}>
+          <Grid gutter="md">
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <NumberInput
+                label="Verdi til kalibrering (m)"
+                value={knownMeasurement}
+                onChange={(value) => setKnownMeasurement(value)}
+                precision={2}
+                step={0.1}
+                min={0.1}
+                className={styles.maxWidthContainer}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <NumberInput
+                label="Målestokk (m/px)"
+                value={metersPerPixel.toFixed(4)}
+                onChange={(value) => {
+                  if (!isCalibrationMode) {
+                    setMetersPerPixel(value);
+                  }
+                }}
+                precision={2}
+                step={0.01}
+                min={0.01}
+                max={10}
+                readOnly={isCalibrationMode}
+                className={styles.maxWidthContainer}
                 styles={{
-                  root: {
-                    minWidth: "120px",
+                  input: {
+                    backgroundColor: isCalibrationMode ? "var(--mantine-color-gray-1)" : undefined,
                   },
                 }}
-              >
-                Start Kalibrering
-              </Button>
-              <Checkbox
-                label="Vis kalibreringslinje"
-                checked={calibrationLineVisible}
-                onChange={toggleCalibrationLineVisibility}
               />
-            </Flex>
-          </Grid.Col>
-        </Grid>
-      </Fieldset>
-      <Fieldset legend="Sett Parametere" mb="lg" className={styles.Fieldset}>
-        <Grid gutter="md">
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <NumberInput
-              label="Sett himmelretning (forskyvning ift nord)"
-              value={angleAdjustment}
-              onChange={(value) => setAngleAdjustment(value)}
-              precision={0}
-              step={1}
-              min={0}
-              max={360}
-              styles={{
-                root: {
-                  maxWidth: "400px",
-                },
-              }}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <NumberInput
-              label="Takhøyde (m)"
-              value={roofHeight}
-              onChange={(value) => setRoofHeight(value)}
-              precision={2}
-              step={0.1}
-              min={0.1}
-              styles={{
-                root: {
-                  maxWidth: "400px",
-                },
-              }}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <Select
-              label="Rund av vinkler til nærmeste.."
-              value={roundAngleTo}
-              onChange={setRoundAngleTo}
-              data={[
-                { value: "1", label: "1 grad" },
-                { value: "5", label: "5 grader" },
-                { value: "10", label: "10 grader" },
-                { value: "45", label: "45 grader" },
-                { value: "90", label: "90 grader" },
-              ]}
-              styles={{
-                root: {
-                  maxWidth: "400px",
-                },
-              }}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <ColorInput
-              label="Velg farge for tegning"
-              value={drawingColor}
-              onChange={setDrawingColor}
-              format="hex"
-              swatches={[
-                "#ffffff",
-                "#868e96",
-                "#fa5252",
-                "#e64980",
-                "#be4bdb",
-                "#7950f2",
-                "#4c6ef5",
-                "#228be6",
-                "#15aabf",
-                "#12b886",
-                "#40c057",
-                "#82c91e",
-                "#fab005",
-                "#fd7e14",
-              ]}
-              styles={{
-                root: {
-                  maxWidth: "400px",
-                },
-              }}
-            />
-          </Grid.Col>
-        </Grid>
-      </Fieldset>
-
-      {lineSegments.length > 0 && (
-        <Fieldset legend="Resultater" mb="lg" className={styles.Fieldset}>
-          <ResultsTable
-            lineSegments={lineSegments}
-            metersPerPixel={metersPerPixel}
-            angleAdjustment={angleAdjustment}
-            roofHeight={roofHeight}
-          />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <Flex align="end" gap="xs" className={styles.maxWidthContainer}>
+                <Button
+                  onClick={startCalibration}
+                  variant="outline"
+                  disabled={isCalibrationMode || lineSegments.length || !imageFile}
+                  leftSection={<IconAdjustments size="1rem" />}
+                >
+                  {isCalibrationMode
+                    ? "Kalibrering pågår"
+                    : isCalibrationDone
+                    ? "Start Rekalibrering"
+                    : "Start Kalibrering"}
+                </Button>
+              </Flex>
+            </Grid.Col>
+          </Grid>
         </Fieldset>
-      )}
-      <Space h="md" />
 
-      {imageFile && (
-        <LineDrawer
-          image={imageFile.file}
-          onDrawingComplete={handleDrawingComplete}
-          onErrors={handleErrors}
-          metersPerPixel={metersPerPixel}
-          roundAngleTo={Number(roundAngleTo)}
-          drawingColor={drawingColor}
-          isCalibrationMode={isCalibrationMode}
-          onCalibrationComplete={handleCalibrationComplete}
-          calibrationLineVisible={calibrationLineVisible}
-          knownMeasurement={knownMeasurement}
-        />
-      )}
+        {/* Fieldset for parametere */}
+        <Fieldset legend="Sett Parametere" mb="lg" className={styles.Fieldset}>
+          <Grid gutter="md">
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <NumberInput
+                label="Sett himmelretning (forskyvning ift nord)"
+                value={angleAdjustment}
+                onChange={(value) => setAngleAdjustment(value)}
+                precision={0}
+                step={1}
+                min={0}
+                max={360}
+                className={styles.maxWidthContainer}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <NumberInput
+                label="Takhøyde (m)"
+                value={roofHeight}
+                onChange={(value) => setRoofHeight(value)}
+                precision={2}
+                step={0.1}
+                min={0.1}
+                className={styles.maxWidthContainer}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <Select
+                label="Rund av vinkler til nærmeste.."
+                value={roundAngleTo}
+                onChange={setRoundAngleTo}
+                data={[
+                  { value: "1", label: "1 grad" },
+                  { value: "5", label: "5 grader" },
+                  { value: "10", label: "10 grader" },
+                  { value: "45", label: "45 grader" },
+                  { value: "90", label: "90 grader" },
+                ]}
+                styles={{
+                  root: {
+                    maxWidth: "400px",
+                  },
+                }}
+              />
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, sm: 6 }}>
+              <ColorInput
+                label="Velg farge for tegning"
+                value={drawingColor}
+                onChange={setDrawingColor}
+                format="hex"
+                swatches={DEFAULT_COLORS}
+                className={styles.maxWidthContainer}
+              />
+            </Grid.Col>
+          </Grid>
+        </Fieldset>
 
-      {errors.length > 0 && (
-        <Box mt="md">
-          <Text fontcolor="red" size="sm">
-            Errors:
-          </Text>
-          <ul>
-            {errors.map((error, index) => (
-              <li key={index}>{error}</li>
-            ))}
-          </ul>
-        </Box>
-      )}
+        {/* Resultater */}
+        {lineSegments.length > 0 && (
+          <Fieldset legend="Resultater" mb="lg" className={styles.Fieldset}>
+            <ResultsTable
+              lineSegments={lineSegments}
+              metersPerPixel={metersPerPixel}
+              angleAdjustment={angleAdjustment}
+              roofHeight={roofHeight}
+              onDownload={handleDownload}
+              isFinished={isFinished}
+            />
+          </Fieldset>
+        )}
+        <Space h="md" />
+
+        {/* Canvas for LineDrawer */}
+        {imageFile && (
+          <LineDrawer
+            image={imageFile.file}
+            onDrawingComplete={handleDrawingComplete}
+            onErrors={handleErrors}
+            metersPerPixel={metersPerPixel}
+            roundAngleTo={Number(roundAngleTo)}
+            drawingColor={drawingColor}
+            isCalibrationMode={isCalibrationMode}
+            onCalibrationComplete={handleCalibrationComplete}
+            provideDownloadAccess={handleProvideDownloadAccess}
+            knownMeasurement={knownMeasurement}
+          />
+        )}
+
+        {errors.length > 0 && (
+          <Box mt="md">
+            <Text fontcolor="red" size="sm">
+              Errors:
+            </Text>
+            <ul>
+              {errors.map((error, index) => (
+                <li key={index}>{error}</li>
+              ))}
+            </ul>
+          </Box>
+        )}
+      </Box>
     </Container>
   );
 };

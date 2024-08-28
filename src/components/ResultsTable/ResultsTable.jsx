@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
-import { Box, Text, Table, Button } from "@mantine/core";
-import { IconFileExport } from "@tabler/icons-react";
+import { Box, Text, Table, Button, Flex } from "@mantine/core";
+import { IconFileExport, IconDownload } from "@tabler/icons-react";
 import * as XLSX from "xlsx";
 
 import { normalizeAngle, calculatePolygonAreaFromLines } from "../../utils/geometry";
@@ -33,7 +33,14 @@ const adjustAndNormalizeAngle = (angle, adjustment) => {
  * @param {number} props.metersPerPixel - Multiplier for length calculations
  * @param {number} props.angleAdjustment - Adjustment to be applied to angles
  */
-const ResultsTable = ({ lineSegments, metersPerPixel, angleAdjustment, roofHeight }) => {
+const ResultsTable = ({
+  lineSegments,
+  metersPerPixel,
+  angleAdjustment,
+  onDownload,
+  isFinished,
+  roofHeight,
+}) => {
   console.log("Incoming lineSegments:", lineSegments);
   console.log("angleAdjustment:", angleAdjustment);
 
@@ -107,13 +114,10 @@ const ResultsTable = ({ lineSegments, metersPerPixel, angleAdjustment, roofHeigh
 
   return (
     <Box mb="md">
-      <Text size="lg" weight={500} mb="xs">
+      <Text size="lg" weight={500} mb="lg">
         Areal Sone: {polygonArea.toFixed(DECIMAL_POINTS_AREA)} m²
       </Text>
-      <Text size="lg" weight={500} mb="xs">
-        Fasader
-      </Text>
-      <Table>
+      <Table mb="lg">
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Fasade</Table.Th>
@@ -133,9 +137,16 @@ const ResultsTable = ({ lineSegments, metersPerPixel, angleAdjustment, roofHeigh
           ))}
         </Table.Tbody>
       </Table>
-      <Button leftSection={<IconFileExport size="1rem" />} onClick={exportToExcel} mt="sm">
-        Eksporter til Excel
-      </Button>
+      <Flex mt="md" gap="lg" justify="flex-start">
+        <Button onClick={exportToExcel} leftSection={<IconFileExport size="1rem" />}>
+          Eksporter til Excel
+        </Button>
+        {isFinished && (
+          <Button variant="outline" onClick={onDownload} leftSection={<IconDownload size="1rem" />}>
+            Last ned bilde
+          </Button>
+        )}
+      </Flex>
     </Box>
   );
 };

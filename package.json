@@ -1,13 +1,14 @@
 {
-  "name": "sonetegner-for-energisimulering",
+  "name": "planmaler",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/build.js",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "push": "git add . && git commit -m \"liten oppdatering\" && git push origin main"
   },
   "dependencies": {
     "@mantine/core": "^7.12.1",

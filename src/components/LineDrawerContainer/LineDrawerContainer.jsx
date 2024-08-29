@@ -26,6 +26,7 @@ import("pdfjs-dist/build/pdf.worker.min.mjs").then(() => {
   console.log("PDF worker loaded");
 });
 
+import useNotifications from "../../hooks/useNotifications";
 import LineDrawer from "../LineDrawer";
 import ResultsTable from "../ResultsTable";
 import styles from "./LineDrawerContainer.module.css";
@@ -38,6 +39,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.j
 const LineDrawerContainer = () => {
   const theme = useMantineTheme();
   const [isLoading, { open: openLoading, close: closeLoading }] = useDisclosure(false);
+  const { showRedNotification } = useNotifications();
   // User inputs
   const [imageFile, setImageFile] = useState(null);
   const [metersPerPixel, setMetersPerPixel] = useState(0.15);
@@ -49,7 +51,6 @@ const LineDrawerContainer = () => {
   const [lineSegments, setLineSegments] = useState([]);
   const [isFinished, setIsFinished] = useState(false);
   const [getCanvasData, setGetCanvasData] = useState(null);
-  const [errors, setErrors] = useState([]);
   const [isCalibrationMode, setIsCalibrationMode] = useState(false);
   const [isCalibrationDone, setIsCalibrationDone] = useState(false);
   const [previousMetersPerPixel, setPreviousMetersPerPixel] = useState(null);
@@ -100,14 +101,6 @@ const LineDrawerContainer = () => {
   /***********************************
    *****   HANDLE INPUT FILE   *******
    ***********************************/
-
-  /**
-   * Håndterer feil som oppstår under tegning
-   * @param {string[]} errorList - Liste over feilmeldinger
-   */
-  const handleErrors = useCallback((errorList) => {
-    setErrors(errorList);
-  }, []);
 
   /**
    * Converts the first page of a PDF file to a PNG image.
@@ -173,18 +166,16 @@ const LineDrawerContainer = () => {
       setImageFile({ file: imageBlob, url: imageUrl, isPdf, name: file.name });
       console.log("ImageFile state updated");
     } catch (error) {
-      console.error("Error processing file:", error);
-      setErrors(["Kunne ikke behandle filen. Vennligst prøv igjen."]);
+      console.warn("Error processing file:", error);
+      showRedNotification("Kunne ikke behandle filen.", "Vennligst prøv igjen.");
     }
   };
 
   /**
-   * Handles file rejection
-   * @param {File[]} files - The rejected files
+   * Informs the user that the file was rejected.
    */
-  const handleFileReject = (files) => {
-    console.log("rejected files", files);
-    setErrors(["Filen ble avvist. Sørg for at det er en gyldig bilde- eller PDF-fil under 10MB."]);
+  const handleFileReject = () => {
+    showRedNotification("Filen ble avvist", "Vennligst last opp en gyldig PDF- eller bildefil.");
   };
 
   /********************************
@@ -258,10 +249,7 @@ const LineDrawerContainer = () => {
             />
           </Dropzone.Accept>
           <Dropzone.Reject>
-            <IconX
-              style={{ width: rem(52), height: rem(52), color: theme.colors.customPrimary[7] }}
-              stroke={1.5}
-            />
+            <IconX style={{ width: rem(52), height: rem(52) }} stroke={1.5} />
           </Dropzone.Reject>
           <Dropzone.Idle>
             <IconPhoto
@@ -284,7 +272,7 @@ const LineDrawerContainer = () => {
   };
 
   return (
-    <Container className={styles.LineDrawerContainer} radius={10}>
+    <Container size="lg" className={styles.LineDrawerContainer}>
       <Box pos="relative">
         <LoadingOverlay
           visible={isLoading}
@@ -311,8 +299,8 @@ const LineDrawerContainer = () => {
             </Grid.Col>
             <Grid.Col span={{ base: 12, sm: 6 }}>
               <NumberInput
-                label="Målestokk (m/px)"
-                value={metersPerPixel.toFixed(4)}
+                label="Målestokk (mm/px)"
+                value={(metersPerPixel * 1000).toFixed(0)}
                 onChange={(value) => {
                   if (!isCalibrationMode) {
                     setMetersPerPixel(value);
@@ -355,7 +343,7 @@ const LineDrawerContainer = () => {
           <Grid gutter="md">
             <Grid.Col span={{ base: 12, sm: 6 }}>
               <NumberInput
-                label="Sett himmelretning (forskyvning ift nord)"
+                label="Sett himmelretning (oppover)"
                 value={angleAdjustment}
                 onChange={(value) => setAngleAdjustment(value)}
                 precision={0}
@@ -397,7 +385,7 @@ const LineDrawerContainer = () => {
             </Grid.Col>
             <Grid.Col span={{ base: 12, sm: 6 }}>
               <ColorInput
-                label="Velg farge for tegning"
+                label="Velg farge for oppmåling"
                 value={drawingColor}
                 onChange={setDrawingColor}
                 format="hex"
@@ -428,28 +416,14 @@ const LineDrawerContainer = () => {
           <LineDrawer
             image={imageFile.file}
             onDrawingComplete={handleDrawingComplete}
-            onErrors={handleErrors}
             metersPerPixel={metersPerPixel}
             roundAngleTo={Number(roundAngleTo)}
             drawingColor={drawingColor}
             isCalibrationMode={isCalibrationMode}
             onCalibrationComplete={handleCalibrationComplete}
-            provideDownloadAccess={handleProvideDownloadAccess}
             knownMeasurement={knownMeasurement}
+            provideDownloadAccess={handleProvideDownloadAccess}
           />
-        )}
-
-        {errors.length > 0 && (
-          <Box mt="md">
-            <Text fontcolor="red" size="sm">
-              Errors:
-            </Text>
-            <ul>
-              {errors.map((error, index) => (
-                <li key={index}>{error}</li>
-              ))}
-            </ul>
-          </Box>
         )}
       </Box>
     </Container>

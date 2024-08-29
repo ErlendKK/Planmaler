@@ -2,8 +2,8 @@ import React, { useRef, useState, useCallback, useEffect } from "react";
 import { Stage, Container, Text, Graphics, Sprite } from "@pixi/react";
 import { TextStyle, Texture } from "pixi.js";
 import { calculateLength, determineOrientation } from "../../utils/geometry";
-import { lighten, Button, Flex } from "@mantine/core";
-import { IconDownload } from "@tabler/icons-react";
+import { lighten, Flex } from "@mantine/core";
+import useNotifications from "../../hooks/useNotifications.jsx";
 
 // Constants
 import {
@@ -12,6 +12,8 @@ import {
   SNAP_DISTANCE,
   NUMBER_OF_DECIMALS,
 } from "../../constants/line-drawer-constants.js";
+
+const LINE_THICKNESS = 3;
 
 /**
  * LineDrawer Component
@@ -34,7 +36,7 @@ const LineDrawer = ({
   const [points, setPoints] = useState([]);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const [snappedPosition, setSnappedPosition] = useState(null);
-  const [message, setMessage] = useState("Klikk for å markere første punkt");
+  const [message, setMessage] = useState("Klikk for å markere første målepunkt");
   const [distance, setDistance] = useState(0);
   const [isDrawing, setIsDrawing] = useState(true);
   const [backgroundTexture, setBackgroundTexture] = useState(null);
@@ -43,28 +45,8 @@ const LineDrawer = ({
   const [calibrationPoints, setCalibrationPoints] = useState([]);
   const [lineNumbers, setLineNumbers] = useState([]);
 
-  const stageRef = useRef(null); // For downloading the canvas as an image
-
-  const downloadImage = () => {
-    if (stageRef.current) {
-      const app = stageRef.current.app;
-      const renderer = app.renderer;
-
-      // Render the stage to a canvas
-      const extractedCanvas = renderer.extract.canvas(app.stage);
-
-      // Convert the canvas to a data URL
-      const dataURL = extractedCanvas.toDataURL("image/png");
-
-      // Create a temporary anchor element and trigger download
-      const link = document.createElement("a");
-      link.href = dataURL;
-      link.download = "drawing_with_background.png";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-  };
+  const stageRef = useRef(null); // Used to download the canvas as an image
+  const { showGreenNotification } = useNotifications();
 
   // Effect for setting background image and resizing canvas to its aspect ratio
   useEffect(() => {
@@ -143,7 +125,7 @@ const LineDrawer = ({
     setPoints([]);
     setIsDrawing(true);
     setIsFinished(false);
-    setMessage("Klikk for å sette første punkt");
+    setMessage("Klikk for å markere første målepunkt");
     setDistance(0);
   };
 
@@ -157,10 +139,10 @@ const LineDrawer = ({
       setPoints(newPoints);
 
       if (newPoints.length === 0) {
-        setMessage("Klikk for å sette første punkt");
+        setMessage("Klikk for å markere første målepunkt");
         setDistance(0);
       } else {
-        setMessage("Press Enter for å fullføre");
+        setMessage("Press Enter for å fullføre. Press Esc for å avbryte");
         // Recalculate distance and angle if there are still points
         if (newPoints.length > 1) {
           const lastPoint = newPoints[newPoints.length - 1];
@@ -214,7 +196,7 @@ const LineDrawer = ({
       };
 
       setPoints([...points, newPoint]);
-      setMessage("Press Enter for å fullføre");
+      setMessage("Press Enter for å fullføre. Press Esc for å avbryte");
     }
   };
 
@@ -249,7 +231,8 @@ const LineDrawer = ({
     onDrawingComplete(segments);
     setIsDrawing(false);
     setIsFinished(true);
-    setMessage("Tegning utført. Press Esc for å begynne forfra");
+    setMessage("");
+    showGreenNotification("Måling fullført!", null, 2000);
   };
 
   /**
@@ -303,7 +286,7 @@ const LineDrawer = ({
       for (let i = 1; i < points.length; i++) {
         const startPoint = points[i - 1];
         const endPoint = points[i];
-        g.lineStyle(3, drawingColor);
+        g.lineStyle(LINE_THICKNESS, drawingColor);
         g.moveTo(startPoint.x, startPoint.y);
         g.lineTo(endPoint.x, endPoint.y);
       }
@@ -312,20 +295,20 @@ const LineDrawer = ({
       if (isDrawing && points.length > 0) {
         const lastPoint = points[points.length - 1];
         const targetPoint = snappedPosition || cursorPosition;
-        g.lineStyle(3, lighten(drawingColor, 0.1));
+        g.lineStyle(LINE_THICKNESS, lighten(drawingColor, 0.1));
         g.moveTo(lastPoint.x, lastPoint.y);
         g.lineTo(targetPoint.x, targetPoint.y);
 
         // Draw snapping indicator only when drawing is in progress
         if (snappedPosition) {
-          g.lineStyle(3, 0xff0000);
+          g.lineStyle(LINE_THICKNESS, 0xff0000);
           g.drawCircle(snappedPosition.x, snappedPosition.y, 5);
         }
       }
 
       // Draw calibration line if calibration mode is active
       if (isCalibrationMode && calibrationPoints.length > 0) {
-        g.lineStyle(3, 0xa2c3b3); // Green color for calibration line
+        g.lineStyle(LINE_THICKNESS, 0x668537);
         g.moveTo(calibrationPoints[0].x, calibrationPoints[0].y);
         if (calibrationPoints.length > 1) {
           g.lineTo(calibrationPoints[1].x, calibrationPoints[1].y);
@@ -354,9 +337,12 @@ const LineDrawer = ({
       y: event.nativeEvent.offsetY,
     };
 
+    // If this is the first point, set it as the start point
     if (calibrationPoints.length === 0) {
       setCalibrationPoints([newPoint]);
       setMessage("Klikk for å sette sluttpunktet for kalibreringslinen");
+
+      // Otherwise, calculate the distance and update meters per pixel
     } else if (calibrationPoints.length === 1) {
       const startPoint = calibrationPoints[0];
       const endPoint = newPoint;
@@ -364,11 +350,15 @@ const LineDrawer = ({
         Math.pow(endPoint.x - startPoint.x, 2) + Math.pow(endPoint.y - startPoint.y, 2)
       );
 
+      // Update meters per pixel and notify user and parent component
       const newMetersPerPixel = knownMeasurement / pixelLength;
       onCalibrationComplete(newMetersPerPixel);
-
       setCalibrationPoints([]);
-      setMessage("Kalibrering utført. Du kan begynne å tegne.");
+      showGreenNotification(
+        "Kalibrering utført",
+        `Målestokk: ${(newMetersPerPixel * 1000).toFixed(0)} mm/px`
+      );
+      setMessage("Klikk for å markere første målepunkt");
     }
   };
 
@@ -376,6 +366,7 @@ const LineDrawer = ({
   useEffect(() => {
     if (isFinished && points.length > 1) {
       const numbers = [];
+      // Get start-, end- and midpoint for each line segment
       for (let i = 1; i < points.length; i++) {
         const startPoint = points[i - 1];
         const endPoint = points[i];
@@ -403,16 +394,11 @@ const LineDrawer = ({
 
   return (
     <Flex direction="column" gap="xs" justify="center" align="center">
-      {/* {isFinished && (
-        <Button onClick={downloadImage} leftSection={<IconDownload size="1rem" />}>
-          Last ned bilde
-        </Button>
-      )} */}
       <Stage
         ref={stageRef}
         width={canvasSize.width}
         height={canvasSize.height}
-        options={{ backgroundColor: 0x1099bb, interactive: true }}
+        options={{ backgroundColor: 0xf7f9f9, interactive: true }}
         onClick={handleClick}
         onMouseMove={handleMouseMove}
       >

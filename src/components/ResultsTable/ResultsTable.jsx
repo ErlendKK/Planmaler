@@ -120,19 +120,19 @@ const ResultsTable = ({
       <Table mb="lg">
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Fasade</Table.Th>
-            <Table.Th>Lengde (m)</Table.Th>
-            <Table.Th>Areal (m²)</Table.Th>
-            <Table.Th>Himmelretning (grader)</Table.Th>
+            <Table.Th style={{ textAlign: "center" }}>Fasade</Table.Th>
+            <Table.Th style={{ textAlign: "center" }}>Lengde (m)</Table.Th>
+            <Table.Th style={{ textAlign: "center" }}>Areal (m²)</Table.Th>
+            <Table.Th style={{ textAlign: "center" }}>Himmelretning (grader)</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
           {adjustedFacadeData.map((data, index) => (
             <Table.Tr key={index}>
-              <Table.Td>{data.Fasade}</Table.Td>
-              <Table.Td>{data["Lengde (m)"]}</Table.Td>
-              <Table.Td>{data["Areal (m²)"]}</Table.Td>
-              <Table.Td>{data["Himmelretning (grader)"]}</Table.Td>
+              <Table.Td style={{ textAlign: "center" }}>{data.Fasade}</Table.Td>
+              <Table.Td style={{ textAlign: "center" }}>{data["Lengde (m)"]}</Table.Td>
+              <Table.Td style={{ textAlign: "center" }}>{data["Areal (m²)"]}</Table.Td>
+              <Table.Td style={{ textAlign: "center" }}>{data["Himmelretning (grader)"]}</Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

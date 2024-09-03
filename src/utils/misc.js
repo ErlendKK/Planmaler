@@ -15,4 +15,11 @@ const replaceDotWithComma = (datapoint) => {
   return newDatapoint;
 };
 
-export { replaceDotWithComma };
+/**
+ * Generates a random number between 1 and 100000
+ */
+const generateRandomNumber = () => {
+  return Math.floor(Math.random() * 100000) + 1;
+};
+
+export { replaceDotWithComma, generateRandomNumber };

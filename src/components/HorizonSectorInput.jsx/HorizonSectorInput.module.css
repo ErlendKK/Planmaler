@@ -4,6 +4,7 @@
   justify-content: center;
   width: 140px;
   margin-left: auto;
+  height: 20px;
 }
 
 .input {
@@ -13,6 +14,7 @@
   border: none;
   box-shadow: none;
   width: 140px;
+  height: 15px;
 }
 
 .input:focus {

@@ -66,6 +66,7 @@ const HorizonSectorInput = ({ values, onChange }) => {
   return (
     <TextInput
       ref={inputRef}
+      radius="md"
       value={inputValue}
       onChange={handleChange}
       placeholder="00-00-00-00"

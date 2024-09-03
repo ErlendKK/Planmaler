@@ -1,12 +1,23 @@
 import React, { useState, useMemo } from "react";
-import { Box, Text, Table, Button, Flex, Tooltip, List } from "@mantine/core";
+import {
+  Box,
+  Text,
+  Table,
+  Button,
+  Flex,
+  Tooltip,
+  List,
+  Stack,
+  Checkbox,
+  Grid,
+} from "@mantine/core";
 import { IconFileExport, IconDownload, IconFileCode, IconInfoCircle } from "@tabler/icons-react";
 import * as XLSX from "xlsx";
 import { create } from "xmlbuilder2";
 
 import { normalizeAngle, calculatePolygonAreaFromLines } from "../../utils/geometry";
 import useNotifications from "../../hooks/useNotifications";
-import { replaceDotWithComma } from "../../utils/misc";
+import { replaceDotWithComma, generateRandomNumber } from "../../utils/misc";
 import HorizonSectorInput from "../HorizonSectorInput.jsx";
 
 // Constants for decimal point precision
@@ -63,6 +74,8 @@ const ResultsTable = ({
   const [lineSegmentsWithHorizonSectors, setLineSegmentsWithHorizonSectors] = useState(() =>
     lineSegments.map(initializeSegmentWithHorizonSectors)
   );
+  const [includeGulv, setIncludeGulv] = useState(false);
+  const [includeTak, setIncludeTak] = useState(false);
 
   /**
    * Updates a horizon sector value for a specific line segment
@@ -151,8 +164,8 @@ const ResultsTable = ({
         name: "Ny Sone",
         comment: "",
         measure_id: "",
-        area: "430.0",
-        volume: "1290.0",
+        area: polygonArea.toFixed(DECIMAL_POINTS_AREA),
+        volume: (polygonArea * roofHeight).toFixed(DECIMAL_POINTS_AREA),
         n50: "1.50",
         furniture: "Lette møbler/lette skillekonstruksjoner",
         thermal_cap_furniture: "5.0",
@@ -182,6 +195,55 @@ const ResultsTable = ({
         horizon_sector4: segment.horizonSector4.toString(),
       });
     });
+
+    if (includeTak) {
+      xml.ele("roof", {
+        id: generateRandomNumber(),
+        name: "Flatt Tak",
+        comment: "",
+        measure_id: "",
+        area: polygonArea.toFixed(DECIMAL_POINTS_AREA),
+        uvalue: "0.20",
+        thermal_cap: "63.0",
+        construction: "Kompakttak m. 200-250 mm betong, 200 mm isolasjon",
+        internal_layer: "Tung himling",
+        direction: "0",
+        inclination: "0",
+        horizon_sector_w: "0",
+        horizon_sector_nw: "0",
+        horizon_sector_n: "0",
+        horizon_sector_ne: "0",
+        horizon_sector_e: "0",
+        horizon_sector_se: "0",
+        horizon_sector_s: "0",
+        horizon_sector_sw: "0",
+      });
+    }
+
+    if (includeGulv) {
+      xml.ele("floor", {
+        id: generateRandomNumber(),
+        name: "Gulv på grunn",
+        comment: "",
+        measure_id: "",
+        area: polygonArea.toFixed(DECIMAL_POINTS_AREA),
+        uvalue: "0.22",
+        thermal_cap: "63.0",
+        construction: "Betongdekke (200-250 mm), 150mm isolasjon (under)",
+        internal_layer: "Tungt gulv",
+        type: "grunn",
+        perimeter: lineSegmentsWithHorizonSectors.reduce((acc, cur) => acc + cur.length, 0),
+        foundation: "0.30",
+        ground_condition: "Leire/silt",
+        ground_thermal_cond: "1.50",
+        ground_thermal_cap: "833.00",
+        edge_insulation_type: "vertikal",
+        edge_insulation_depth: "0.60",
+        edge_insulation_thickness: "5.00",
+        edge_insulation_product: "50 mm XPS (varmeledningsevne 0.034)",
+        edge_insulation_lambda: "0.034",
+      });
+    }
 
     xml.up().ele("climate", {
       id: "klima#0",
@@ -235,6 +297,14 @@ const ResultsTable = ({
 
   // Prepare adjusted facade data for rendering
   const adjustedFacadeData = prepareAdjustedFacadeData();
+
+  const toggleGulv = () => {
+    setIncludeGulv(!includeGulv);
+  };
+
+  const toggleTak = () => {
+    setIncludeTak(!includeTak);
+  };
 
   return (
     <Box mb="md">
@@ -309,19 +379,48 @@ const ResultsTable = ({
           })}
         </Table.Tbody>
       </Table>
-      <Flex mt="md" gap="lg" justify="flex-start">
-        <Button onClick={exportToExcel} leftSection={<IconFileExport size="1rem" />}>
-          Eksporter til Excel
-        </Button>
-        <Button onClick={exportToXML} leftSection={<IconFileCode size="1rem" />}>
-          Eksporter til XML
-        </Button>
-        {isFinished && (
-          <Button variant="outline" onClick={onDownload} leftSection={<IconDownload size="1rem" />}>
-            Last ned bilde
-          </Button>
-        )}
-      </Flex>
+      <Grid>
+        <Grid.Col span={8}>
+          <Flex mt="md" gap="lg" justify="flex-start">
+            <Button onClick={exportToExcel} leftSection={<IconFileExport size="1rem" />}>
+              Eksporter til Excel
+            </Button>
+            <Button onClick={exportToXML} leftSection={<IconFileCode size="1rem" />}>
+              Eksporter til XML
+            </Button>
+
+            {isFinished && (
+              <Button
+                variant="outline"
+                onClick={onDownload}
+                leftSection={<IconDownload size="1rem" />}
+              >
+                Last ned bilde
+              </Button>
+            )}
+          </Flex>
+        </Grid.Col>
+        <Grid.Col span={4}>
+          <Flex gap="5px" justify="flex-end" align="center" mr="sm">
+            <Stack gap="5px" className="styles.CheckboxContainer">
+              <Checkbox
+                label="Tak"
+                size="sm"
+                variant="outline"
+                value={includeTak}
+                onClick={toggleTak}
+              ></Checkbox>
+              <Checkbox
+                label="Gulv"
+                size="sm"
+                variant="outline"
+                value={includeGulv}
+                onClick={toggleGulv}
+              ></Checkbox>
+            </Stack>
+          </Flex>
+        </Grid.Col>
+      </Grid>
     </Box>
   );
 };

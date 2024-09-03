@@ -276,7 +276,7 @@ const ResultsTable = ({
                 multiline
               >
                 <span style={{ display: "inline-flex", alignItems: "center" }}>
-                  Horisont <IconInfoCircle size={16} style={{ marginLeft: "5px" }} />
+                  <IconInfoCircle size={16} style={{ marginLeft: "5px" }} />
                 </span>
               </Tooltip>
             </Table.Th>

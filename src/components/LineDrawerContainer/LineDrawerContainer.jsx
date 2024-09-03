@@ -90,7 +90,7 @@ const LineDrawerContainer = () => {
       if (dataURL) {
         const link = document.createElement("a");
         link.href = dataURL;
-        link.download = "drawing_with_background.png";
+        link.download = "nummerert_tegning.png";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

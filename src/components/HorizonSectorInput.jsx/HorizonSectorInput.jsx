@@ -2,30 +2,37 @@ import React, { useRef, useEffect, useState } from "react";
 import { TextInput, lighten } from "@mantine/core";
 import styles from "./HorizonSectorInput.module.css";
 
+/**
+ * Formats the input value as a string with 4 sections separated by dashes
+ * @param {number[]} vals - The values to format
+ * @returns {string} The formatted value
+ */
+function formatValue(values) {
+  return values.map((v) => v.toString().padStart(2, "0")).join("-");
+}
+
 const HorizonSectorInput = ({ values, onChange }) => {
   const inputRef = useRef(null);
   const [inputValue, setInputValue] = useState(formatValue(values));
 
+  // Update the formated version of input value when the values prop changes
   useEffect(() => {
     setInputValue(formatValue(values));
   }, [values]);
 
-  function formatValue(vals) {
-    return vals.map((v) => v.toString().padStart(2, "0")).join("-");
-  }
-
-  function parseValue(input) {
-    return input.split("-").map((v) => parseInt(v, 10) || 0);
-  }
-
+  /**
+   * Updates the input value and cursor position based on the new value and the cursor position.
+   * The cursor position is used to determine which section of the input value to update.
+   *
+   * @param {React.ChangeEvent<HTMLInputElement>} event - The change event
+   * @returns {void}
+   */
   function handleChange(event) {
+    // Remove the old character at the cursor position
     const newInputValue = event.target.value;
     const cursorPosition = event.target.selectionStart;
     const updatedValue =
       newInputValue.slice(0, cursorPosition) + newInputValue.slice(cursorPosition + 1);
-    console.log("cursorPosition", cursorPosition);
-    console.log("newInputValue", newInputValue);
-    console.log("updatedValue", updatedValue);
 
     let sections = updatedValue.split("-");
     let newValues = [0, 0, 0, 0];
@@ -50,7 +57,7 @@ const HorizonSectorInput = ({ values, onChange }) => {
     setInputValue(formattedValue);
     onChange(newValues);
 
-    // Set cursor position after React updates the input
+    // Set cursor position after React updates the input (pass to microtask queue)
     setTimeout(() => {
       inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
     }, 0);

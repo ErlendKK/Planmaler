@@ -1,0 +1,21 @@
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  margin-left: auto;
+}
+
+.input {
+  text-align: center;
+  letter-spacing: 0.2em;
+  font-family: monospace;
+  border: none;
+  box-shadow: none;
+  width: 140px;
+}
+
+.input:focus {
+  border: none;
+  outline: none;
+}

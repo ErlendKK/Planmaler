@@ -14,3 +14,5 @@ const replaceDotWithComma = (datapoint) => {
   }
   return newDatapoint;
 };
+
+export { replaceDotWithComma };

@@ -1,16 +1,5 @@
 import React, { useState, useMemo } from "react";
-import {
-  Box,
-  Text,
-  Table,
-  Button,
-  Flex,
-  Tooltip,
-  List,
-  Stack,
-  Checkbox,
-  Grid,
-} from "@mantine/core";
+import { Box, Text, Table, Button, Flex, Tooltip, List, MultiSelect, Grid } from "@mantine/core";
 import { IconFileExport, IconDownload, IconFileCode, IconInfoCircle } from "@tabler/icons-react";
 import * as XLSX from "xlsx";
 import { create } from "xmlbuilder2";
@@ -19,6 +8,7 @@ import { normalizeAngle, calculatePolygonAreaFromLines } from "../../utils/geome
 import useNotifications from "../../hooks/useNotifications";
 import { replaceDotWithComma, generateRandomNumber } from "../../utils/misc";
 import HorizonSectorInput from "../HorizonSectorInput.jsx";
+import ButtonMultiSelect from "../ButtonMultiSelect/";
 
 // Constants for decimal point precision
 const DECIMAL_POINTS_LENGTH = 1;
@@ -74,8 +64,16 @@ const ResultsTable = ({
   const [lineSegmentsWithHorizonSectors, setLineSegmentsWithHorizonSectors] = useState(() =>
     lineSegments.map(initializeSegmentWithHorizonSectors)
   );
-  const [includeGulv, setIncludeGulv] = useState(false);
-  const [includeTak, setIncludeTak] = useState(false);
+  // Extra elements like tak and gulv
+  const [selectedElements, setSelectedElements] = useState([]);
+
+  const handleElementChange = (val) => {
+    setSelectedElements((current) =>
+      current.includes(val) ? current.filter((item) => item !== val) : [...current, val]
+    );
+  };
+
+  const bygningsElements = ["Tak", "Gulv"];
 
   /**
    * Updates a horizon sector value for a specific line segment
@@ -142,6 +140,34 @@ const ResultsTable = ({
     });
   };
 
+  const getFacadeName = (segment, index) => {
+    const adjustedAngle = adjustAndNormalizeAngle(segment.angle, angleAdjustment);
+
+    if (
+      (adjustedAngle >= 350 && adjustedAngle <= 360) ||
+      (adjustedAngle >= 0 && adjustedAngle < 10)
+    ) {
+      return `${index + 1} Nord`;
+    } else if (adjustedAngle >= 10 && adjustedAngle < 80) {
+      return `${index + 1} Nord-Øst`;
+    } else if (adjustedAngle >= 80 && adjustedAngle < 100) {
+      return `${index + 1} Øst`;
+    } else if (adjustedAngle >= 100 && adjustedAngle < 170) {
+      return `${index + 1} Sør-Øst`;
+    } else if (adjustedAngle >= 170 && adjustedAngle < 190) {
+      return `${index + 1} Sør`;
+    } else if (adjustedAngle >= 190 && adjustedAngle < 260) {
+      return `${index + 1} Sør-Vest`;
+    } else if (adjustedAngle >= 260 && adjustedAngle < 280) {
+      return `${index + 1} Vest`;
+    } else if (adjustedAngle >= 280 && adjustedAngle < 350) {
+      return `${index + 1} Nord-Vest`;
+    }
+
+    // This should never happen, but just in case
+    return `Fasade ${index + 1}`;
+  };
+
   /**
    * Generates XML structure for the facade data
    * @returns {Object} XML object
@@ -180,7 +206,7 @@ const ResultsTable = ({
       const adjustedAngle = adjustAndNormalizeAngle(segment.angle, angleAdjustment);
       xml.ele("facade", {
         id: `facade#${index + 1}`,
-        name: `${index + 1}`,
+        name: getFacadeName(segment, index),
         comment: `Lengde ${segment.length.toFixed(DECIMAL_POINTS_LENGTH)} m`,
         measure_id: "",
         area: (segment.length * roofHeight).toFixed(DECIMAL_POINTS_AREA),
@@ -196,7 +222,7 @@ const ResultsTable = ({
       });
     });
 
-    if (includeTak) {
+    if (selectedElements.includes("Tak")) {
       xml.ele("roof", {
         id: generateRandomNumber(),
         name: "Flatt Tak",
@@ -220,7 +246,7 @@ const ResultsTable = ({
       });
     }
 
-    if (includeGulv) {
+    if (selectedElements.includes("Gulv")) {
       xml.ele("floor", {
         id: generateRandomNumber(),
         name: "Gulv på grunn",
@@ -281,7 +307,7 @@ const ResultsTable = ({
     const excelData = lineSegments.map((segment, index) => {
       const adjustedAngle = adjustAndNormalizeAngle(segment.angle, angleAdjustment);
       return {
-        Fasade: index + 1,
+        Fasade: getFacadeName(segment, index),
         "Lengde (m)": segment.length.toFixed(DECIMAL_POINTS_LENGTH),
         "Areal (m²)": (segment.length * roofHeight).toFixed(DECIMAL_POINTS_AREA),
         "Himmelretning (grader)":
@@ -380,13 +406,10 @@ const ResultsTable = ({
         </Table.Tbody>
       </Table>
       <Grid>
-        <Grid.Col span={8}>
-          <Flex mt="md" gap="lg" justify="flex-start">
+        <Grid.Col span={6}>
+          <Flex mt="md" gap="md" justify="flex-start">
             <Button onClick={exportToExcel} leftSection={<IconFileExport size="1rem" />}>
               Eksporter til Excel
-            </Button>
-            <Button onClick={exportToXML} leftSection={<IconFileCode size="1rem" />}>
-              Eksporter til XML
             </Button>
 
             {isFinished && (
@@ -400,24 +423,16 @@ const ResultsTable = ({
             )}
           </Flex>
         </Grid.Col>
-        <Grid.Col span={4}>
-          <Flex gap="5px" justify="flex-end" align="center" mr="sm">
-            <Stack gap="5px" className="styles.CheckboxContainer">
-              <Checkbox
-                label="Tak"
-                size="sm"
-                variant="outline"
-                value={includeTak}
-                onClick={toggleTak}
-              ></Checkbox>
-              <Checkbox
-                label="Gulv"
-                size="sm"
-                variant="outline"
-                value={includeGulv}
-                onClick={toggleGulv}
-              ></Checkbox>
-            </Stack>
+        <Grid.Col span={6}>
+          <Flex gap="md" justify="flex-end" align="flex-start" mt="md" mr="sm">
+            <Button onClick={exportToXML} leftSection={<IconFileCode size="1rem" />}>
+              Eksporter til XML
+            </Button>
+            <ButtonMultiSelect
+              bygningsElements={bygningsElements}
+              selectedElements={selectedElements}
+              handleElementChange={handleElementChange}
+            />
           </Flex>
         </Grid.Col>
       </Grid>

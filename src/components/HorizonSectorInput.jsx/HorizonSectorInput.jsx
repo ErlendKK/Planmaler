@@ -11,7 +11,7 @@ function formatValue(values) {
   return values.map((v) => v.toString().padStart(2, "0")).join("-");
 }
 
-const HorizonSectorInput = ({ values, onChange }) => {
+const HorizonSectorInput = ({ values, onChange, tabIndex }) => {
   const inputRef = useRef(null);
   const [inputValue, setInputValue] = useState(formatValue(values));
 
@@ -70,6 +70,7 @@ const HorizonSectorInput = ({ values, onChange }) => {
       value={inputValue}
       onChange={handleChange}
       placeholder="00-00-00-00"
+      tabIndex={tabIndex}
       classNames={{
         root: styles.root,
         input: styles.input,

@@ -291,9 +291,9 @@ const LineDrawerContainer = () => {
                 label="Verdi til kalibrering (m)"
                 value={knownMeasurement}
                 onChange={(value) => setKnownMeasurement(value)}
-                precision={2}
-                step={0.1}
-                min={0.1}
+                precision={0}
+                step={1}
+                min={1}
                 className={styles.maxWidthContainer}
               />
             </Grid.Col>
@@ -303,7 +303,7 @@ const LineDrawerContainer = () => {
                 value={(metersPerPixel * 1000).toFixed(0)}
                 onChange={(value) => {
                   if (!isCalibrationMode) {
-                    setMetersPerPixel(value);
+                    setMetersPerPixel(value / 1000);
                   }
                 }}
                 precision={2}
@@ -425,6 +425,19 @@ const LineDrawerContainer = () => {
             provideDownloadAccess={handleProvideDownloadAccess}
           />
         )}
+      </Box>
+      <Box
+        sx={(theme) => ({
+          position: "fixed",
+          bottom: theme.spacing.xs,
+          right: theme.spacing.xs,
+          transform: "rotate(-90deg)",
+          transformOrigin: "bottom right",
+        })}
+      >
+        <Text size="xs" color="dimmed">
+          &copy; {new Date().getFullYear()} Erlend Kvitrud
+        </Text>
       </Box>
     </Container>
   );

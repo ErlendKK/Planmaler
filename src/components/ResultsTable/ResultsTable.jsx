@@ -1,32 +1,31 @@
 import React, { useState, useMemo } from "react";
-import { Box, Text, Table, Button, Flex, Tooltip, List, MultiSelect, Grid } from "@mantine/core";
+import { Box, Text, Table, Button, Flex, Select, Tooltip, List, Grid } from "@mantine/core";
 import { IconFileExport, IconDownload, IconFileCode, IconInfoCircle } from "@tabler/icons-react";
 import * as XLSX from "xlsx";
 import { create } from "xmlbuilder2";
 
 import { normalizeAngle, calculatePolygonAreaFromLines } from "../../utils/geometry";
 import useNotifications from "../../hooks/useNotifications";
-import { replaceDotWithComma, generateRandomNumber } from "../../utils/misc";
+import { replaceDotWithComma, getFacadeName, generateRandomNumber } from "../../utils/misc";
 import HorizonSectorInput from "../HorizonSectorInput.jsx";
-import ButtonMultiSelect from "../ButtonMultiSelect/";
+import ButtonMultiSelect from "../ButtonMultiSelect";
+import { varmelagringFasade } from "../../data/varmelagring";
+import SelectWithInput from "../SelectWithInput";
+import InfoIconTooltip from "../InfoIconTooltip/InfoIconTooltip.jsx";
 
-// Constants for decimal point precision
-const DECIMAL_POINTS_LENGTH = 1;
-const DECIMAL_POINTS_AREA = 1;
-const DECIMAL_POINTS_ANGLE = 1;
+import {
+  DEFAULT_VARMELAGRING_FASADE,
+  DECIMAL_POINTS_LENGTH,
+  DECIMAL_POINTS_AREA,
+  DECIMAL_POINTS_ANGLE,
+} from "../../constants/results-table-constants.js";
 
-/**
- * Adjusts and normalizes an angle
- * @param {number} angle - The original angle
- * @param {number} adjustment - The adjustment to apply
- * @returns {number|string} The adjusted and normalized angle, or 'N/A' if invalid
- */
-const adjustAndNormalizeAngle = (angle, adjustment) => {
-  if (typeof angle !== "number" || isNaN(angle)) {
-    return "N/A";
-  }
-  return normalizeAngle(angle + adjustment);
-};
+const horisotTooltipList = [
+  "90 - 45 grader venstre",
+  "45 - 0 grader venstre",
+  "0 - 45 grader høyre",
+  "45 - 90 grader høyre",
+];
 
 /**
  * Initializes a line segment with horizon sectors
@@ -64,6 +63,10 @@ const ResultsTable = ({
   const [lineSegmentsWithHorizonSectors, setLineSegmentsWithHorizonSectors] = useState(() =>
     lineSegments.map(initializeSegmentWithHorizonSectors)
   );
+
+  // Varmelagring option initally set to default
+  const [selectedVarmelagring, setSelectedVarmelagring] = useState(lineSegments.map(() => ""));
+
   // Extra elements like tak and gulv
   const [selectedElements, setSelectedElements] = useState([]);
 
@@ -97,7 +100,15 @@ const ResultsTable = ({
     );
   };
 
-  // Calculate polygon area using memoization for performance
+  const handleVarmelagringChange = (index, value) => {
+    setSelectedVarmelagring((prev) => {
+      const newSelections = [...prev];
+      newSelections[index] = value;
+      return newSelections;
+    });
+  };
+
+  // Calculate polygon area
   const polygonArea = useMemo(() => {
     if (lineSegments.length < 3) {
       showRedNotification("Arealet er ikke beregnet", `Mål opp 3 linjer for å beregne areal.`);
@@ -122,7 +133,7 @@ const ResultsTable = ({
    */
   const prepareAdjustedFacadeData = () => {
     return lineSegmentsWithHorizonSectors.map((segment, index) => {
-      const adjustedAngle = adjustAndNormalizeAngle(segment.angle, angleAdjustment);
+      const adjustedAngle = normalizeAngle(segment.angle + angleAdjustment);
 
       const datapoint = {
         Fasade: index + 1,
@@ -138,34 +149,6 @@ const ResultsTable = ({
 
       return replaceDotWithComma(datapoint);
     });
-  };
-
-  const getFacadeName = (segment, index) => {
-    const adjustedAngle = adjustAndNormalizeAngle(segment.angle, angleAdjustment);
-
-    if (
-      (adjustedAngle >= 350 && adjustedAngle <= 360) ||
-      (adjustedAngle >= 0 && adjustedAngle < 10)
-    ) {
-      return `${index + 1} Nord`;
-    } else if (adjustedAngle >= 10 && adjustedAngle < 80) {
-      return `${index + 1} Nord-Øst`;
-    } else if (adjustedAngle >= 80 && adjustedAngle < 100) {
-      return `${index + 1} Øst`;
-    } else if (adjustedAngle >= 100 && adjustedAngle < 170) {
-      return `${index + 1} Sør-Øst`;
-    } else if (adjustedAngle >= 170 && adjustedAngle < 190) {
-      return `${index + 1} Sør`;
-    } else if (adjustedAngle >= 190 && adjustedAngle < 260) {
-      return `${index + 1} Sør-Vest`;
-    } else if (adjustedAngle >= 260 && adjustedAngle < 280) {
-      return `${index + 1} Vest`;
-    } else if (adjustedAngle >= 280 && adjustedAngle < 350) {
-      return `${index + 1} Nord-Vest`;
-    }
-
-    // This should never happen, but just in case
-    return `Fasade ${index + 1}`;
   };
 
   /**
@@ -186,7 +169,7 @@ const ResultsTable = ({
         company: "Veni AS",
       })
       .ele("zone", {
-        id: "sone#3",
+        id: `planmaler#${generateRandomNumber()}`,
         name: "Ny Sone",
         comment: "",
         measure_id: "",
@@ -203,17 +186,25 @@ const ResultsTable = ({
       });
 
     lineSegmentsWithHorizonSectors.forEach((segment, index) => {
-      const adjustedAngle = adjustAndNormalizeAngle(segment.angle, angleAdjustment);
+      console.log("selectedVarmelagring", selectedVarmelagring);
+      console.log(
+        "varmelagringFasade[selectedVarmelagring]",
+        varmelagringFasade[selectedVarmelagring]
+      );
+
+      const adjustedAngle = normalizeAngle(segment.angle + angleAdjustment);
       xml.ele("facade", {
         id: `facade#${index + 1}`,
-        name: getFacadeName(segment, index),
+        name: getFacadeName(segment, index, adjustedAngle),
         comment: `Lengde ${segment.length.toFixed(DECIMAL_POINTS_LENGTH)} m`,
         measure_id: "",
         area: (segment.length * roofHeight).toFixed(DECIMAL_POINTS_AREA),
         uvalue: "0.21",
-        thermal_cap: "63.0",
+        thermal_cap: selectedVarmelagring[index]
+          ? varmelagringFasade[selectedVarmelagring[index]].toString()
+          : varmelagringFasade[DEFAULT_VARMELAGRING_FASADE].toString(),
         construction: "36mm bindingsverk, 200mm isolasjon",
-        internal_layer: "Tung vegg",
+        internal_layer: selectedVarmelagring || DEFAULT_VARMELAGRING_FASADE,
         direction: adjustedAngle === "N/A" ? "N/A" : adjustedAngle.toFixed(DECIMAL_POINTS_ANGLE),
         horizon_sector1: segment.horizonSector1.toString(),
         horizon_sector2: segment.horizonSector2.toString(),
@@ -305,9 +296,9 @@ const ResultsTable = ({
    */
   const exportToExcel = () => {
     const excelData = lineSegments.map((segment, index) => {
-      const adjustedAngle = adjustAndNormalizeAngle(segment.angle, angleAdjustment);
+      const adjustedAngle = normalizeAngle(segment.angle + angleAdjustment);
       return {
-        Fasade: getFacadeName(segment, index),
+        Fasade: getFacadeName(segment, index, adjustedAngle),
         "Lengde (m)": segment.length.toFixed(DECIMAL_POINTS_LENGTH),
         "Areal (m²)": (segment.length * roofHeight).toFixed(DECIMAL_POINTS_AREA),
         "Himmelretning (grader)":
@@ -350,37 +341,34 @@ const ResultsTable = ({
             <Table.Th>Fasade</Table.Th>
             <Table.Th>Lengde (m)</Table.Th>
             <Table.Th>Areal (m²)</Table.Th>
+
             <Table.Th>Himmelretning (grader)</Table.Th>
+
+            <Table.Th>
+              <Flex justify="center">
+                Varmelagring
+                <InfoIconTooltip
+                  textInput="Velg fra listen eller skriv inn"
+                  listItems={["Bruk TAB til å navigere nedover"]}
+                />
+              </Flex>
+            </Table.Th>
+
             <Table.Th styles={{ th: { textAlign: "right" } }}>
-              Horisont
-              <Tooltip
-                label={
-                  <div>
-                    <Text size="sm" mb="xs">
-                      De fire seksjonene tilsvarer:
-                    </Text>
-                    <List size="sm" spacing="xs">
-                      <List.Item>90 - 45 grader venstre</List.Item>
-                      <List.Item>45 - 0 grader venstre</List.Item>
-                      <List.Item>0 - 45 grader høyre</List.Item>
-                      <List.Item>45 - 90 grader høyre</List.Item>
-                    </List>
-                  </div>
-                }
-                position="top"
-                withArrow
-                multiline
-              >
-                <span style={{ display: "inline-flex", alignItems: "center" }}>
-                  <IconInfoCircle size={16} style={{ marginLeft: "5px" }} />
-                </span>
-              </Tooltip>
+              <Flex justify="flex-end">
+                Horisont
+                <InfoIconTooltip
+                  textInput="De fire seksjonene tilsvarer:"
+                  listItems={horisotTooltipList}
+                />
+              </Flex>
             </Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
           {lineSegmentsWithHorizonSectors.map((segment, index) => {
-            const adjustedAngle = adjustAndNormalizeAngle(segment.angle, angleAdjustment);
+            const adjustedAngle = normalizeAngle(segment.angle + angleAdjustment);
+
             return (
               <Table.Tr key={index}>
                 <Table.Td>{index + 1}</Table.Td>
@@ -388,6 +376,15 @@ const ResultsTable = ({
                 <Table.Td>{(segment.length * roofHeight).toFixed(DECIMAL_POINTS_AREA)}</Table.Td>
                 <Table.Td>
                   {adjustedAngle === "N/A" ? "N/A" : adjustedAngle.toFixed(DECIMAL_POINTS_ANGLE)}
+                </Table.Td>
+
+                <Table.Td>
+                  <SelectWithInput
+                    data={Object.keys(varmelagringFasade)}
+                    value={selectedVarmelagring[index]}
+                    onChange={(value) => handleVarmelagringChange(index, value)}
+                    tabIndex={index + 1}
+                  />
                 </Table.Td>
                 <Table.Td>
                   <HorizonSectorInput
@@ -398,6 +395,7 @@ const ResultsTable = ({
                       segment.horizonSector4,
                     ]}
                     onChange={(newValues) => updateHorizonSectors(index, ...newValues)}
+                    tabIndex={lineSegmentsWithHorizonSectors.length + index + 1}
                   />
                 </Table.Td>
               </Table.Tr>

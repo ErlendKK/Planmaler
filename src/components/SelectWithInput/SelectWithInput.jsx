@@ -5,17 +5,19 @@ import { DEFAULT_VARMELAGRING_FASADE } from "../../constants/results-table-const
 
 const SelectWithInput = ({ value, onChange, data, tabIndex }) => {
   const [inputValue, setInputValue] = useState(value);
+  const [localData, setLocalData] = useState(data.map((item) => item + " "));
 
   useEffect(() => {
     setInputValue(value);
   }, [value]);
 
   const handleChange = (newValue) => {
-    setInputValue(newValue);
-    onChange(newValue);
+    setInputValue(newValue.trim());
+    onChange(newValue.trim());
   };
 
-  const handleInputChange = (newValue) => {
+  const handleSearchChange = (newValue) => {
+    console.log("handleSearchChange", newValue);
     setInputValue(newValue);
     if (data.includes(newValue)) {
       onChange(newValue);
@@ -30,13 +32,20 @@ const SelectWithInput = ({ value, onChange, data, tabIndex }) => {
       searchable
       clearable={false}
       placeholder={DEFAULT_VARMELAGRING_FASADE}
-      onSearchChange={handleInputChange}
-      searchValue={inputValue.trim()}
+      onSearchChange={handleSearchChange}
+      searchValue={inputValue}
       nothingFoundMessage="Ingen treff"
       tabIndex={tabIndex}
+      comboboxProps={{
+        position: "left",
+        middlewares: { flip: false, shift: false },
+        withinPortal: true,
+        shadow: "md",
+      }}
       classNames={{
         root: styles.root,
         input: styles.input,
+        dropdown: styles.dropdown,
       }}
       styles={(theme) => ({
         input: {

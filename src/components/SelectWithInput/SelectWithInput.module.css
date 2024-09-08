@@ -19,3 +19,7 @@
   border: none;
   outline: none;
 }
+
+.dropdown {
+  min-width: 250px;
+}

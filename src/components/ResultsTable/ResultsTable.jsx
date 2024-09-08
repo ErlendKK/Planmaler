@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Box, Text, Table, Button, Flex, Select, Tooltip, List, Grid } from "@mantine/core";
 import { IconFileExport, IconDownload, IconFileCode, IconInfoCircle } from "@tabler/icons-react";
 import * as XLSX from "xlsx";
@@ -101,6 +101,7 @@ const ResultsTable = ({
   };
 
   const handleVarmelagringChange = (index, value) => {
+    console.log("handleVarmelagringChange", index, value);
     setSelectedVarmelagring((prev) => {
       const newSelections = [...prev];
       newSelections[index] = value;
@@ -204,7 +205,7 @@ const ResultsTable = ({
           ? varmelagringFasade[selectedVarmelagring[index]].toString()
           : varmelagringFasade[DEFAULT_VARMELAGRING_FASADE].toString(),
         construction: "36mm bindingsverk, 200mm isolasjon",
-        internal_layer: selectedVarmelagring || DEFAULT_VARMELAGRING_FASADE,
+        internal_layer: selectedVarmelagring[index] || DEFAULT_VARMELAGRING_FASADE,
         direction: adjustedAngle === "N/A" ? "N/A" : adjustedAngle.toFixed(DECIMAL_POINTS_ANGLE),
         horizon_sector1: segment.horizonSector1.toString(),
         horizon_sector2: segment.horizonSector2.toString(),

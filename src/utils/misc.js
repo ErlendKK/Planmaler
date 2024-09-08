@@ -46,10 +46,10 @@ const getFacadeName = (segment, index, angleAdjustment) => {
 };
 
 /**
- * Generates a random number between 1 and 100000
+ * Generates a random number between 1 and 10000000
  */
 const generateRandomNumber = () => {
-  return Math.floor(Math.random() * 100000) + 1;
+  return Math.floor(Math.random() * 10000000) + 1;
 };
 
 export { replaceDotWithComma, generateRandomNumber, getFacadeName };

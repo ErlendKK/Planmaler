@@ -169,6 +169,8 @@ const ResultsTable = ({
         user: "Erlend Kvitrud",
         company: "Veni AS",
       })
+
+      // Sone
       .ele("zone", {
         id: `planmaler#${generateRandomNumber()}`,
         name: "Ny Sone",
@@ -186,6 +188,7 @@ const ResultsTable = ({
         working_days: "5-dagers uke; 8 uker ferie",
       });
 
+    // Fasader
     lineSegmentsWithHorizonSectors.forEach((segment, index) => {
       console.log("selectedVarmelagring", selectedVarmelagring);
       console.log(
@@ -195,7 +198,7 @@ const ResultsTable = ({
 
       const adjustedAngle = normalizeAngle(segment.angle + angleAdjustment);
       xml.ele("facade", {
-        id: `facade#${index + 1}`,
+        id: `facade#${generateRandomNumber()}`,
         name: getFacadeName(segment, index, adjustedAngle),
         comment: `Lengde ${segment.length.toFixed(DECIMAL_POINTS_LENGTH)} m`,
         measure_id: "",
@@ -214,6 +217,7 @@ const ResultsTable = ({
       });
     });
 
+    // Tak
     if (selectedElements.includes("Tak")) {
       xml.ele("roof", {
         id: generateRandomNumber(),
@@ -238,6 +242,7 @@ const ResultsTable = ({
       });
     }
 
+    // Gulv
     if (selectedElements.includes("Gulv")) {
       xml.ele("floor", {
         id: generateRandomNumber(),
@@ -263,6 +268,7 @@ const ResultsTable = ({
       });
     }
 
+    // Klimasted
     xml.up().ele("climate", {
       id: "klima#0",
       name: "Stavanger",

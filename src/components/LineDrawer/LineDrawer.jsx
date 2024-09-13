@@ -1,9 +1,11 @@
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import { Stage, Container, Text, Graphics, Sprite } from "@pixi/react";
 import { TextStyle, Texture } from "pixi.js";
+
 import { calculateLength, determineOrientation } from "../../utils/geometry";
 import { lighten, Flex } from "@mantine/core";
 import useNotifications from "../../hooks/useNotifications.jsx";
+import { useSegments } from "../../contexts/SegmentsContext.jsx";
 
 // Constants
 import {
@@ -13,7 +15,9 @@ import {
   NUMBER_OF_DECIMALS,
 } from "../../constants/line-drawer-constants.js";
 
-const LINE_THICKNESS = 3;
+const FACADE_THICKNESS = 3.3;
+const CONNECTION_THICKNESS = 4;
+const CONNECTION_COLOR = 0xc84630; // Red
 
 /**
  * LineDrawer Component
@@ -26,7 +30,9 @@ const LineDrawer = ({
   onDrawingComplete,
   metersPerPixel,
   roundAngleTo,
+  angleAdjustment,
   drawingColor,
+  roofHeight,
   isCalibrationMode,
   onCalibrationComplete,
   knownMeasurement,
@@ -38,13 +44,13 @@ const LineDrawer = ({
   const [snappedPosition, setSnappedPosition] = useState(null);
   const [message, setMessage] = useState("Klikk for å markere første målepunkt");
   const [distance, setDistance] = useState(0);
-  const [isDrawing, setIsDrawing] = useState(true);
+  const [isDrawing, setIsDrawing] = useState(false);
   const [backgroundTexture, setBackgroundTexture] = useState(null);
   const [canvasSize, setCanvasSize] = useState({ width: 400, height: 300 });
-  const [isFinished, setIsFinished] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState([]);
   const [lineNumbers, setLineNumbers] = useState([]);
 
+  const { completedZones, addZone, addZoneConnection } = useSegments();
   const stageRef = useRef(null); // Used to download the canvas as an image
   const { showGreenNotification } = useNotifications();
 
@@ -124,7 +130,6 @@ const LineDrawer = ({
   const resetDrawing = () => {
     setPoints([]);
     setIsDrawing(true);
-    setIsFinished(false);
     setMessage("Klikk for å markere første målepunkt");
     setDistance(0);
   };
@@ -187,14 +192,21 @@ const LineDrawer = ({
   const handleClick = (event) => {
     if (isCalibrationMode) {
       handleCalibrationClick(event);
-    } else if (!isDrawing) {
       return;
-    } else {
-      const newPoint = snappedPosition || {
-        x: event.nativeEvent.offsetX,
-        y: event.nativeEvent.offsetY,
-      };
+    }
 
+    const newPoint = snappedPosition || {
+      x: event.nativeEvent.offsetX,
+      y: event.nativeEvent.offsetY,
+    };
+
+    if (!isDrawing) {
+      // Start a new drawing
+      setIsDrawing(true);
+      setPoints([newPoint]);
+      setMessage("Klikk for å markere neste målepunkt. Press Enter for å fullføre.");
+    } else {
+      // Add a new point to the drawing
       setPoints([...points, newPoint]);
       setMessage("Press Enter for å fullføre. Press Esc for å avbryte");
     }
@@ -217,6 +229,7 @@ const LineDrawer = ({
         angle: angle,
         startPoint: startPoint,
         endPoint: endPoint,
+        color: drawingColor,
       };
     });
 
@@ -227,11 +240,14 @@ const LineDrawer = ({
    * Ends the drawing process and calculates final segments
    */
   const endDrawing = () => {
+    if (!isDrawing) return;
+
     const segments = calculateSegments();
+    addZone(segments, metersPerPixel, roofHeight, angleAdjustment);
     onDrawingComplete(segments);
+    setPoints([]);
     setIsDrawing(false);
-    setIsFinished(true);
-    setMessage("");
+    setMessage("Klikk for å måle opp ny sone");
     showGreenNotification("Måling fullført!", null, 2000);
   };
 
@@ -239,24 +255,35 @@ const LineDrawer = ({
    * Handles mouse movement for updating cursor position and calculations
    * @param {Object} event - Mouse move event object
    */
-  const handleMouseMove = (event) => {
-    if (!isDrawing) return;
+  const handleMouseMove = useCallback(
+    (event) => {
+      const newPosition = { x: event.nativeEvent.offsetX, y: event.nativeEvent.offsetY };
+      setCursorPosition(newPosition);
 
-    const newPosition = { x: event.nativeEvent.offsetX, y: event.nativeEvent.offsetY };
-    setCursorPosition(newPosition);
+      // Check for snapping
+      const snapped = checkSnapping(newPosition);
+      setSnappedPosition(snapped);
 
-    // Check for snapping
-    const snapped = checkSnapping(newPosition);
-    setSnappedPosition(snapped);
+      if (points.length > 0) {
+        const lastPoint = points[points.length - 1];
+        const targetPoint = snapped || newPosition;
+        const dx = targetPoint.x - lastPoint.x;
+        const dy = targetPoint.y - lastPoint.y;
+        setDistance((Math.sqrt(dx * dx + dy * dy) * metersPerPixel).toFixed(NUMBER_OF_DECIMALS));
+      }
+    },
+    [isDrawing, points, metersPerPixel, completedZones]
+  );
 
-    if (points.length > 0) {
-      const lastPoint = points[points.length - 1];
-      const targetPoint = snapped || newPosition;
-      const dx = targetPoint.x - lastPoint.x;
-      const dy = targetPoint.y - lastPoint.y;
-      setDistance((Math.sqrt(dx * dx + dy * dy) * metersPerPixel).toFixed(NUMBER_OF_DECIMALS));
-    }
-  };
+  const getAllPoints = useCallback(() => {
+    return [
+      // NB! Keep ...points at the bottom
+      ...completedZones.flatMap((zone) =>
+        zone.segments.flatMap((segment) => [segment.startPoint, segment.endPoint])
+      ),
+      ...points,
+    ];
+  }, [completedZones, points]);
 
   /**
    * Checks if the current position should snap to an existing point
@@ -264,7 +291,10 @@ const LineDrawer = ({
    * @returns {Object|null} Snapped position or null
    */
   const checkSnapping = (position) => {
-    for (let point of points) {
+    // Collect all points from completed segments and current drawing
+    const allPoints = getAllPoints();
+
+    for (let point of allPoints) {
       const dx = position.x - point.x;
       const dy = position.y - point.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
@@ -282,33 +312,76 @@ const LineDrawer = ({
     (g) => {
       g.clear();
 
-      // Create a new PIXI.Graphics object for each line segment
+      // Function to draw dashed line
+      const drawDashedLine = (fromX, fromY, toX, toY, dash = 12, gap = 7) => {
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const dashCount = Math.floor(distance / (dash + gap));
+        const dashX = (dx / distance) * (dash + gap);
+        const dashY = (dy / distance) * (dash + gap);
+
+        g.moveTo(fromX, fromY);
+
+        for (let i = 0; i < dashCount; i++) {
+          const startX = fromX + i * dashX;
+          const startY = fromY + i * dashY;
+          const endX = startX + (dashX * dash) / (dash + gap);
+          const endY = startY + (dashY * dash) / (dash + gap);
+
+          g.lineTo(endX, endY);
+          g.moveTo(endX + (dashX * gap) / (dash + gap), endY + (dashY * gap) / (dash + gap));
+        }
+      };
+
+      // Draw completed zones
+      completedZones.forEach((zone) => {
+        // Draw facades
+        zone.segments.forEach((segment) => {
+          g.lineStyle(FACADE_THICKNESS, segment.color || FACADE_COLOR);
+          g.moveTo(segment.startPoint.x, segment.startPoint.y);
+          g.lineTo(segment.endPoint.x, segment.endPoint.y);
+        });
+
+        // Draw connections
+        (zone.connections || []).forEach((connection) => {
+          g.lineStyle(CONNECTION_THICKNESS, CONNECTION_COLOR);
+          drawDashedLine(
+            connection.segment.startPoint.x,
+            connection.segment.startPoint.y,
+            connection.segment.endPoint.x,
+            connection.segment.endPoint.y
+          );
+        });
+      });
+
+      // Draw current segment being drawn
       for (let i = 1; i < points.length; i++) {
         const startPoint = points[i - 1];
         const endPoint = points[i];
-        g.lineStyle(LINE_THICKNESS, drawingColor);
+        g.lineStyle(FACADE_THICKNESS, drawingColor);
         g.moveTo(startPoint.x, startPoint.y);
         g.lineTo(endPoint.x, endPoint.y);
       }
 
-      // Draw line from last point to cursor if still drawing
+      // Draw snapping indicator
+      if (snappedPosition) {
+        g.lineStyle(FACADE_THICKNESS, 0xff0000);
+        g.drawCircle(snappedPosition.x, snappedPosition.y, 5);
+      }
+
+      // Draw line from last point to cursor only if drawing
       if (isDrawing && points.length > 0) {
         const lastPoint = points[points.length - 1];
         const targetPoint = snappedPosition || cursorPosition;
-        g.lineStyle(LINE_THICKNESS, lighten(drawingColor, 0.1));
+        g.lineStyle(FACADE_THICKNESS, lighten(drawingColor, 0.1));
         g.moveTo(lastPoint.x, lastPoint.y);
         g.lineTo(targetPoint.x, targetPoint.y);
-
-        // Draw snapping indicator only when drawing is in progress
-        if (snappedPosition) {
-          g.lineStyle(LINE_THICKNESS, 0xff0000);
-          g.drawCircle(snappedPosition.x, snappedPosition.y, 5);
-        }
       }
 
       // Draw calibration line if calibration mode is active
       if (isCalibrationMode && calibrationPoints.length > 0) {
-        g.lineStyle(LINE_THICKNESS, 0x668537);
+        g.lineStyle(FACADE_THICKNESS, 0x668537);
         g.moveTo(calibrationPoints[0].x, calibrationPoints[0].y);
         if (calibrationPoints.length > 1) {
           g.lineTo(calibrationPoints[1].x, calibrationPoints[1].y);
@@ -316,6 +389,15 @@ const LineDrawer = ({
           g.lineTo(cursorPosition.x, cursorPosition.y);
         }
       }
+
+      // Draw points for all segments (completed and current)
+      const allPoints = getAllPoints();
+      allPoints.forEach((point) => {
+        g.beginFill(0xffffff);
+        g.lineStyle(2, 0x000000);
+        g.drawCircle(point.x, point.y, 3);
+        g.endFill();
+      });
     },
     [
       points,
@@ -325,6 +407,7 @@ const LineDrawer = ({
       drawingColor,
       isCalibrationMode,
       calibrationPoints,
+      completedZones,
     ]
   );
 
@@ -364,23 +447,18 @@ const LineDrawer = ({
 
   // Effect to update line numbers when drawing is finished
   useEffect(() => {
-    if (isFinished && points.length > 1) {
-      const numbers = [];
-      // Get start-, end- and midpoint for each line segment
-      for (let i = 1; i < points.length; i++) {
-        const startPoint = points[i - 1];
-        const endPoint = points[i];
-        const midPoint = {
-          x: (startPoint.x + endPoint.x) / 2,
-          y: (startPoint.y + endPoint.y) / 2,
-        };
-        numbers.push({ number: i, x: midPoint.x, y: midPoint.y });
-      }
+    const allSegments = completedZones.flatMap((zone) => zone.segments).concat(calculateSegments());
+    if (allSegments.length > 0) {
+      const numbers = allSegments.map((segment, index) => ({
+        number: index + 1,
+        x: (segment.startPoint.x + segment.endPoint.x) / 2,
+        y: (segment.startPoint.y + segment.endPoint.y) / 2,
+      }));
       setLineNumbers(numbers);
     } else {
       setLineNumbers([]);
     }
-  }, [isFinished, points]);
+  }, [completedZones, points]);
 
   // TextStyle-factory for Pixi Text elements
   const getTextStyle = (fontSize = 16) =>

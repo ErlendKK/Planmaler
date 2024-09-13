@@ -31,10 +31,10 @@ import LineDrawer from "../LineDrawer";
 import ResultsTable from "../ResultsTable";
 import styles from "./LineDrawerContainer.module.css";
 import { DEFAULT_COLORS, FILE_SIZE_THRESHOLD } from "../../constants/line-drawer-constants";
+import { generateRandomNumber } from "../../utils/misc";
+import { useSegments } from "../../contexts/SegmentsContext";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-
-// TODO: Fiks bug som gjør at ringen blir værende igjen etter jeg presser Esc.
 
 const LineDrawerContainer = () => {
   const theme = useMantineTheme();
@@ -46,15 +46,28 @@ const LineDrawerContainer = () => {
   const [roundAngleTo, setRoundAngleTo] = useState("90");
   const [roofHeight, setRoofHeight] = useState(2.7);
   const [drawingColor, setDrawingColor] = useState(theme.colors.customPrimary[7]);
+  const [userSetColor, setUserSetColor] = useState(false);
   const [angleAdjustment, setAngleAdjustment] = useState(0);
   // Other state variables
   const [lineSegments, setLineSegments] = useState([]);
-  const [isFinished, setIsFinished] = useState(false);
   const [getCanvasData, setGetCanvasData] = useState(null);
   const [isCalibrationMode, setIsCalibrationMode] = useState(false);
   const [isCalibrationDone, setIsCalibrationDone] = useState(false);
   const [previousMetersPerPixel, setPreviousMetersPerPixel] = useState(null);
   const [knownMeasurement, setKnownMeasurement] = useState(1);
+
+  // Zone state
+  const { completedZones } = useSegments();
+  const [zones, setZones] = useState([
+    {
+      id: 1,
+      lineSegments: [],
+      color: DEFAULT_COLORS[0],
+      isFinished: false,
+    },
+  ]);
+  const [activeZoneId, setActiveZoneId] = useState(1);
+  const [nextColorIndex, setNextColorIndex] = useState(1);
 
   /**
    * Håndterer fullføring av tegning
@@ -63,20 +76,70 @@ const LineDrawerContainer = () => {
   const handleDrawingComplete = useCallback(
     (segments) => {
       console.log("Drawing completed, segments:", segments);
-      const segmentsWithArea = segments.map((segment) => ({
-        ...segment,
-        area: segment.length * roofHeight,
-      }));
-      setLineSegments(segmentsWithArea);
-      setIsFinished(true);
-      console.log("isFinished set to true");
+
+      setZones((currentZones) => {
+        return currentZones.map((zone) => {
+          if (zone.id === activeZoneId) {
+            const segmentsWithArea = segments.map((segment) => ({
+              ...segment,
+              area: segment.length * roofHeight,
+              soneID: activeZoneId,
+            }));
+
+            return {
+              ...zone,
+              lineSegments: segmentsWithArea,
+              isFinished: true,
+            };
+          }
+          return zone;
+        });
+      });
+
+      console.log(`Zone ${activeZoneId} finished`);
+      startNewZone();
     },
-    [roofHeight]
+    [activeZoneId, roofHeight]
   );
 
-  useEffect(() => {
-    console.log("isFinished changed:", isFinished);
-  }, [isFinished]);
+  const handleColorChange = (color) => {
+    setDrawingColor(color);
+    setUserSetColor(true);
+  };
+
+  const startNewZone = useCallback(() => {
+    let newColor;
+
+    if (!userSetColor) {
+      // Case 1: User didnt set the color
+      newColor = DEFAULT_COLORS[nextColorIndex % DEFAULT_COLORS.length];
+      setNextColorIndex((prevIndex) => (prevIndex + 1) % DEFAULT_COLORS.length);
+    } else {
+      // Case 2: User sets the color
+      const currentColorIndex = DEFAULT_COLORS.indexOf(drawingColor);
+      if (currentColorIndex !== -1) {
+        newColor = DEFAULT_COLORS[(currentColorIndex + 1) % DEFAULT_COLORS.length];
+      } else {
+        const randomIndex = Math.floor(Math.random() * DEFAULT_COLORS.length);
+        newColor = DEFAULT_COLORS[randomIndex];
+      }
+    }
+
+    const newZoneId = generateRandomNumber();
+    const newZone = {
+      id: newZoneId,
+      lineSegments: [],
+      color: newColor,
+      isFinished: false,
+    };
+
+    setZones((currentZones) => [...currentZones, newZone]);
+    setActiveZoneId(newZoneId);
+    setDrawingColor(newColor);
+    setUserSetColor(false);
+
+    console.log("New zone started with ID:", newZoneId, "and color:", newColor);
+  }, [drawingColor, userSetColor, nextColorIndex]);
 
   // Function to receive download access from LineDrawer
   const handleProvideDownloadAccess = useCallback((getDataFunction) => {
@@ -175,6 +238,7 @@ const LineDrawerContainer = () => {
    * Informs the user that the file was rejected.
    */
   const handleFileReject = () => {
+    console.warn("File rejected");
     showRedNotification("Filen ble avvist", "Vennligst last opp en gyldig PDF- eller bildefil.");
   };
 
@@ -387,7 +451,7 @@ const LineDrawerContainer = () => {
               <ColorInput
                 label="Velg farge for oppmåling"
                 value={drawingColor}
-                onChange={setDrawingColor}
+                onChange={handleColorChange}
                 format="hex"
                 swatches={DEFAULT_COLORS}
                 className={styles.maxWidthContainer}
@@ -397,15 +461,13 @@ const LineDrawerContainer = () => {
         </Fieldset>
 
         {/* Resultater */}
-        {lineSegments.length > 0 && (
+        {completedZones.length > 0 && (
           <Fieldset legend="Resultater" mb="lg" className={styles.Fieldset}>
             <ResultsTable
-              lineSegments={lineSegments}
               metersPerPixel={metersPerPixel}
               angleAdjustment={angleAdjustment}
               roofHeight={roofHeight}
               onDownload={handleDownload}
-              isFinished={isFinished}
             />
           </Fieldset>
         )}
@@ -418,7 +480,9 @@ const LineDrawerContainer = () => {
             onDrawingComplete={handleDrawingComplete}
             metersPerPixel={metersPerPixel}
             roundAngleTo={Number(roundAngleTo)}
+            angleAdjustment={angleAdjustment}
             drawingColor={drawingColor}
+            roofHeight={roofHeight}
             isCalibrationMode={isCalibrationMode}
             onCalibrationComplete={handleCalibrationComplete}
             knownMeasurement={knownMeasurement}

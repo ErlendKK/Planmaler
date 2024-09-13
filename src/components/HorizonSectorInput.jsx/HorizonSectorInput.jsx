@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { TextInput, lighten } from "@mantine/core";
 import styles from "./HorizonSectorInput.module.css";
 
@@ -14,6 +15,7 @@ function formatValue(values) {
 const HorizonSectorInput = ({ values, onChange, tabIndex }) => {
   const inputRef = useRef(null);
   const [inputValue, setInputValue] = useState(formatValue(values));
+  const [wait, setWait] = useState(false);
 
   // Update the formated version of input value when the values prop changes
   useEffect(() => {
@@ -28,6 +30,8 @@ const HorizonSectorInput = ({ values, onChange, tabIndex }) => {
    * @returns {void}
    */
   function handleChange(event) {
+    if (wait) return;
+
     // Remove the old character at the cursor position
     const newInputValue = event.target.value;
     const cursorPosition = event.target.selectionStart;
@@ -39,7 +43,9 @@ const HorizonSectorInput = ({ values, onChange, tabIndex }) => {
     let newCursorPosition = cursorPosition;
 
     sections.forEach((section, index) => {
-      if (section.length > 0) {
+      if (section.length > 0 && index < 4) {
+        flushSync(() => setWait(true));
+
         let value = parseInt(section, 10);
         console.log(value);
         if (!isNaN(value)) {
@@ -59,8 +65,23 @@ const HorizonSectorInput = ({ values, onChange, tabIndex }) => {
 
     // Set cursor position after React updates the input (pass to microtask queue)
     setTimeout(() => {
+      setWait(false);
       inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
     }, 0);
+  }
+
+  function handlePaste(event) {
+    event.preventDefault();
+    const pastedText = event.clipboardData.getData("text");
+    const sections = pastedText.split("-").slice(0, 4);
+    const newValues = sections.map((section) => {
+      const value = parseInt(section, 10);
+      return isNaN(value) ? 0 : Math.min(Math.max(value, 0), 90);
+    });
+    while (newValues.length < 4) newValues.push(0);
+    const formattedValue = formatValue(newValues);
+    setInputValue(formattedValue);
+    onChange(newValues);
   }
 
   return (
@@ -69,6 +90,7 @@ const HorizonSectorInput = ({ values, onChange, tabIndex }) => {
       radius="md"
       value={inputValue}
       onChange={handleChange}
+      onPaste={handlePaste}
       placeholder="00-00-00-00"
       tabIndex={tabIndex}
       classNames={{

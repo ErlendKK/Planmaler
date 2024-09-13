@@ -8,18 +8,20 @@ export const MIN_CALIBRATION_LENGTH = 5; // Minimum length in pixels
 export const VIEWPORT_SCALING = 1.5; // scaling relative to the original size of the page.
 export const FILE_SIZE_THRESHOLD = 100 * 1024; // Threshold file-size for displaying loading screen
 export const DEFAULT_COLORS = [
-  "#ffffff",
-  "#868e96",
-  "#fa5252",
-  "#e64980",
-  "#be4bdb",
-  "#7950f2",
-  "#4c6ef5",
-  "#228be6",
-  "#15aabf",
-  "#12b886",
-  "#40c057",
-  "#82c91e",
-  "#fab005",
-  "#fd7e14",
+  "#378566", // Main green
+  "#4c6ef5", // Blue
+  "#fd7e14", // Orange
+  "#be4bdb", // Purple
+  "#15aabf", // Cyan
+  "#e64980", // Pink
+  "#7950f2", // Indigo
+  "#228be6", // Bright blue
+  "#fa5252", // Red
+  "#12b886", // Teal
+  "#40c057", // Light green
+  "#82c91e", // Lime green
+  "#fab005", // Yellow
+  "#ff8787", // Light red
+  "#74c0fc", // Light blue
+  "#f06595", // Soft pink
 ]; // Default colors for the color picker

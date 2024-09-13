@@ -1,19 +1,9 @@
-import React from "react";
-import {
-  Box,
-  Button,
-  CheckIcon,
-  Combobox,
-  Group,
-  List,
-  Flex,
-  useCombobox,
-  Stack,
-} from "@mantine/core";
+import React, { useEffect, useRef } from "react";
+import { Box, Button, CheckIcon, Combobox, Group, List, useCombobox } from "@mantine/core";
 import { IconSelector } from "@tabler/icons-react";
-import { Container } from "postcss";
 
 function ButtonMultiSelect({ bygningsElements, selectedElements, handleElementChange }) {
+  const comboboxRef = useRef(null);
   const combobox = useCombobox({
     onDropdownClose: () => combobox.resetSelectedOption(),
   });
@@ -27,8 +17,22 @@ function ButtonMultiSelect({ bygningsElements, selectedElements, handleElementCh
     </Combobox.Option>
   ));
 
+  // Close the dropdown if clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (comboboxRef.current && !comboboxRef.current.contains(event.target)) {
+        combobox.closeDropdown();
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [combobox]);
+
   return (
-    <Box>
+    <Box ref={comboboxRef}>
       <Combobox
         store={combobox}
         width={250}
@@ -37,7 +41,7 @@ function ButtonMultiSelect({ bygningsElements, selectedElements, handleElementCh
         withinPortal={false}
         onOptionSubmit={(val) => {
           handleElementChange(val);
-          combobox.closeDropdown();
+          // Don't close dropdown here, allowing multiple selections
         }}
       >
         <Combobox.Target>
@@ -54,14 +58,6 @@ function ButtonMultiSelect({ bygningsElements, selectedElements, handleElementCh
           <Combobox.Options>{options}</Combobox.Options>
         </Combobox.Dropdown>
       </Combobox>
-
-      {selectedElements.length > 0 && (
-        <List mt="xs">
-          {selectedElements.map((item) => (
-            <List.Item key={item}>{item}</List.Item>
-          ))}
-        </List>
-      )}
     </Box>
   );
 }

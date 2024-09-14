@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { calculatePolygonAreaFromLines } from "../utils/geometry";
-import { getFacadeName } from "../utils/misc";
 
 const SegmentsContext = createContext();
 
@@ -76,6 +75,7 @@ export const SegmentsProvider = ({ children }) => {
             area: zoneArea,
             roofHeight,
             angleAdjustment,
+            color: segments[0]?.color || "",
           },
         ];
       });

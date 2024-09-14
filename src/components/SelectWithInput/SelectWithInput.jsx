@@ -5,7 +5,6 @@ import { DEFAULT_VARMELAGRING_FASADE } from "../../constants/results-table-const
 
 const SelectWithInput = ({ value, onChange, data, tabIndex }) => {
   const [inputValue, setInputValue] = useState(value);
-  const [localData, setLocalData] = useState(data.map((item) => item + " "));
 
   useEffect(() => {
     setInputValue(value);
@@ -31,6 +30,7 @@ const SelectWithInput = ({ value, onChange, data, tabIndex }) => {
       onChange={handleChange}
       searchable
       clearable={false}
+      maxDropdownHeight={300}
       placeholder={DEFAULT_VARMELAGRING_FASADE}
       onSearchChange={handleSearchChange}
       searchValue={inputValue}
@@ -46,10 +46,14 @@ const SelectWithInput = ({ value, onChange, data, tabIndex }) => {
         root: styles.root,
         input: styles.input,
         dropdown: styles.dropdown,
+        options: styles.dropdownContent,
       }}
       styles={(theme) => ({
         input: {
           backgroundColor: lighten(theme.colors.dark[7], 0.95),
+        },
+        options: {
+          maxHeight: "none", // Remove max-height limitation
         },
       })}
     />

@@ -14,6 +14,14 @@ import InfoIconTooltip from "../InfoIconTooltip/InfoIconTooltip.jsx";
 import { useSegments } from "../../contexts/SegmentsContext.jsx";
 
 import {
+  yearsimOptions,
+  internlasterOptions,
+  oppvarmingOptions,
+  VAVOptions,
+  CAVOptions,
+} from "../../constants/xml-templates.js";
+
+import {
   DEFAULT_VARMELAGRING_FASADE,
   DECIMAL_POINTS_LENGTH,
   DECIMAL_POINTS_AREA,
@@ -27,9 +35,10 @@ const horisotTooltipList = [
   "45 - 90 grader høyre",
 ];
 
+const SELECTED_ELEMENTS_OPTIONS = ["Tak", "Gulv", "CAV", "VAV", "Internlaster", "Oppvarming"];
+
 const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
   const { completedZones, updateSegment } = useSegments();
-
   const [selectedVarmelagring, setSelectedVarmelagring] = useState({});
   const [selectedElements, setSelectedElements] = useState([]);
 
@@ -150,7 +159,7 @@ const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
         measure_id: "",
         person: "Erlend Kvitrud",
         units: String(completedZones.length),
-        building_type: "Skolebygg",
+        building_type: "Kontorbygg",
         user: "Erlend Kvitrud",
         company: "Veni AS",
       }
@@ -174,11 +183,11 @@ const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
         working_days: "5-dagers uke; 8 uker ferie",
       });
 
-      zone.segments.forEach((segment, segmentIndex) => {
+      zone.segments.forEach((segment) => {
         const adjustedAngle = normalizeAngle(segment.angle + zone.angleAdjustment);
         zoneElement.ele("facade", {
           id: `fasade#${generateRandomNumber()}`,
-          name: getFacadeName(segment, segmentIndex, adjustedAngle),
+          name: getFacadeName(segment, adjustedAngle),
           comment: `Lengde ${segment.length.toFixed(DECIMAL_POINTS_LENGTH)} m`,
           measure_id: "",
           area: (segment.length * zone.roofHeight).toFixed(DECIMAL_POINTS_AREA),
@@ -204,7 +213,7 @@ const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
 
         zoneElement.ele("zone_connection", {
           id: `sonekobling#${generateRandomNumber()}`,
-          name: `kobling ${zone.name} - ${facingZoneName}`,
+          name: `kobling ${facingZoneName} - ${zone.name}`,
           comment: "",
           measure_id: "",
           area: (connection.segment.length * zone.roofHeight).toFixed(DECIMAL_POINTS_AREA),
@@ -279,9 +288,49 @@ const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
           edge_insulation_lambda: "0.034",
         });
       }
+
+      // Add new elements based on selectedElements
+      if (selectedElements.includes("CAV")) {
+        zoneElement.ele("ventilation", CAVOptions);
+      }
+
+      if (selectedElements.includes("VAV")) {
+        zoneElement.ele("ventilation", VAVOptions);
+      }
+
+      if (selectedElements.includes("Internlaster")) {
+        zoneElement.ele("internal_gain", internlasterOptions);
+      }
+
+      if (selectedElements.includes("Oppvarming")) {
+        zoneElement.ele("heating", oppvarmingOptions);
+      }
     });
 
-    // Add climate data (you might want to make this configurable)
+    // Årssimmulering
+    xml.ele("yearsim", yearsimOptions);
+
+    // Energimerke
+    const energymarkElement = xml.ele("energymark", {
+      id: "energimerke#38",
+      name: "Energimerke",
+      comment: "",
+      measure_id: "",
+      scale: "new2",
+      project_type: "old_building",
+      building_subtype: "Kontorer, enkle",
+      built: "2024",
+      company: "Veni AS",
+      person: "Navn Navnesen",
+      unheated_floor_area: "0.0",
+    });
+
+    // Add included_zone elements for each zone
+    completedZones.forEach((zone) => {
+      energymarkElement.ele("included_zone", { id: `sone#${zone.id}` });
+    });
+
+    // Add climate data
     xml.ele("climate", {
       id: "klima#0",
       name: "Stavanger",
@@ -296,7 +345,7 @@ const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "fasade_data.xml";
+    link.download = "sone_data.xml";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -325,11 +374,11 @@ const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
       });
 
       // All segments data
-      zone.segments.forEach((segment, segmentIndex) => {
+      zone.segments.forEach((segment) => {
         const adjustedAngle = normalizeAngle(segment.angle + zone.angleAdjustment);
         allSegmentsData.push({
           Sone: zone.name || `Sone ${zoneIndex + 1}`,
-          Fasade: getFacadeName(segment, segmentIndex, adjustedAngle),
+          Fasade: getFacadeName(segment, adjustedAngle),
           "Lengde (m)": segment.length.toFixed(DECIMAL_POINTS_LENGTH),
           "Areal (m²)": (segment.length * zone.roofHeight).toFixed(DECIMAL_POINTS_AREA),
           "Himmelretning (grader)":
@@ -338,10 +387,10 @@ const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
       });
 
       // Create individual zone worksheets
-      const zoneData = zone.segments.map((segment, segmentIndex) => {
+      const zoneData = zone.segments.map((segment) => {
         const adjustedAngle = normalizeAngle(segment.angle + zone.angleAdjustment);
         return {
-          Fasade: getFacadeName(segment, segmentIndex, adjustedAngle),
+          Fasade: getFacadeName(segment, adjustedAngle),
           "Lengde (m)": segment.length.toFixed(DECIMAL_POINTS_LENGTH),
           "Areal (m²)": (segment.length * zone.roofHeight).toFixed(DECIMAL_POINTS_AREA),
           "Himmelretning (grader)":
@@ -432,7 +481,7 @@ const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
               Eksporter til XML
             </Button>
             <ButtonMultiSelect
-              bygningsElements={["Tak", "Gulv"]}
+              bygningsElements={SELECTED_ELEMENTS_OPTIONS}
               selectedElements={selectedElements}
               handleElementChange={handleElementChange}
             />

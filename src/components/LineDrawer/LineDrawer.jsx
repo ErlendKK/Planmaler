@@ -49,8 +49,9 @@ const LineDrawer = ({
   const [canvasSize, setCanvasSize] = useState({ width: 400, height: 300 });
   const [calibrationPoints, setCalibrationPoints] = useState([]);
   const [lineNumbers, setLineNumbers] = useState([]);
+  const [zoneFillPolygons, setZoneFillPolygons] = useState([]);
 
-  const { completedZones, addZone, addZoneConnection } = useSegments();
+  const { completedZones, addZone } = useSegments();
   const stageRef = useRef(null); // Used to download the canvas as an image
   const { showGreenNotification } = useNotifications();
 
@@ -242,6 +243,15 @@ const LineDrawer = ({
   const endDrawing = () => {
     if (!isDrawing) return;
 
+    // Add to completed polygons to permaently display its background color
+    setZoneFillPolygons((prev) => [
+      ...prev,
+      {
+        color: drawingColor,
+        points: points,
+      },
+    ]);
+
     const segments = calculateSegments();
     addZone(segments, metersPerPixel, roofHeight, angleAdjustment);
     onDrawingComplete(segments);
@@ -333,6 +343,29 @@ const LineDrawer = ({
           g.moveTo(endX + (dashX * gap) / (dash + gap), endY + (dashY * gap) / (dash + gap));
         }
       };
+
+      // Draw fills for completed zones
+      zoneFillPolygons.forEach((polygon) => {
+        g.beginFill(lighten(polygon.color, 0.6), 0.4);
+        g.moveTo(polygon.points[0].x, polygon.points[0].y);
+        for (let i = 1; i < polygon.points.length; i++) {
+          g.lineTo(polygon.points[i].x, polygon.points[i].y);
+        }
+        g.endFill();
+      });
+
+      // Draw current zone fill if at least one segment is drawn
+      if (points.length > 1) {
+        g.beginFill(lighten(drawingColor, 0.6), 0.4);
+        g.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+          g.lineTo(points[i].x, points[i].y);
+        }
+        if (isDrawing) {
+          g.lineTo(cursorPosition.x, cursorPosition.y);
+        }
+        g.endFill();
+      }
 
       // Draw completed zones
       completedZones.forEach((zone) => {

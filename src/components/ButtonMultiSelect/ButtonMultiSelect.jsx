@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Box, Button, CheckIcon, Combobox, Group, List, useCombobox } from "@mantine/core";
+import { Box, Button, CheckIcon, Combobox, Group, useCombobox } from "@mantine/core";
 import { IconSelector } from "@tabler/icons-react";
 
 function ButtonMultiSelect({ bygningsElements, selectedElements, handleElementChange }) {
@@ -8,14 +8,19 @@ function ButtonMultiSelect({ bygningsElements, selectedElements, handleElementCh
     onDropdownClose: () => combobox.resetSelectedOption(),
   });
 
-  const options = bygningsElements.map((item) => (
-    <Combobox.Option value={item} key={item}>
-      <Group>
-        {selectedElements.includes(item) && <CheckIcon size={12} />}
-        <span>{item}</span>
-      </Group>
-    </Combobox.Option>
-  ));
+  // Separate general and office-specific elements
+  const generalElements = ["Tak", "Gulv"];
+  const officeElements = ["Internlaster", "CAV", "VAV", "Oppvarming"];
+
+  const renderOptions = (elements) =>
+    elements.map((item) => (
+      <Combobox.Option value={item} key={item}>
+        <Group>
+          {selectedElements.includes(item) && <CheckIcon size={12} />}
+          <span>{item}</span>
+        </Group>
+      </Combobox.Option>
+    ));
 
   // Close the dropdown if clicking outside
   useEffect(() => {
@@ -55,7 +60,10 @@ function ButtonMultiSelect({ bygningsElements, selectedElements, handleElementCh
         </Combobox.Target>
 
         <Combobox.Dropdown>
-          <Combobox.Options>{options}</Combobox.Options>
+          <Combobox.Options>
+            <Combobox.Group label="Generelt">{renderOptions(generalElements)}</Combobox.Group>
+            <Combobox.Group label="Kontor">{renderOptions(officeElements)}</Combobox.Group>
+          </Combobox.Options>
         </Combobox.Dropdown>
       </Combobox>
     </Box>

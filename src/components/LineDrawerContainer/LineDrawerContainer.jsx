@@ -58,14 +58,6 @@ const LineDrawerContainer = () => {
 
   // Zone state
   const { completedZones } = useSegments();
-  const [zones, setZones] = useState([
-    {
-      id: 1,
-      lineSegments: [],
-      color: DEFAULT_COLORS[0],
-      isFinished: false,
-    },
-  ]);
   const [activeZoneId, setActiveZoneId] = useState(1);
   const [nextColorIndex, setNextColorIndex] = useState(1);
 
@@ -76,27 +68,6 @@ const LineDrawerContainer = () => {
   const handleDrawingComplete = useCallback(
     (segments) => {
       console.log("Drawing completed, segments:", segments);
-
-      setZones((currentZones) => {
-        return currentZones.map((zone) => {
-          if (zone.id === activeZoneId) {
-            const segmentsWithArea = segments.map((segment) => ({
-              ...segment,
-              area: segment.length * roofHeight,
-              soneID: activeZoneId,
-            }));
-
-            return {
-              ...zone,
-              lineSegments: segmentsWithArea,
-              isFinished: true,
-            };
-          }
-          return zone;
-        });
-      });
-
-      console.log(`Zone ${activeZoneId} finished`);
       startNewZone();
     },
     [activeZoneId, roofHeight]
@@ -133,7 +104,6 @@ const LineDrawerContainer = () => {
       isFinished: false,
     };
 
-    setZones((currentZones) => [...currentZones, newZone]);
     setActiveZoneId(newZoneId);
     setDrawingColor(newColor);
     setUserSetColor(false);

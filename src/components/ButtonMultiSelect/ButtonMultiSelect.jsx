@@ -9,7 +9,7 @@ function ButtonMultiSelect({ bygningsElements, selectedElements, handleElementCh
   });
 
   // Separate general and office-specific elements
-  const generalElements = ["Tak", "Gulv"];
+  const generalElements = ["Kombiner Sonekoblinger", "Tak", "Gulv"];
   const officeElements = ["Internlaster", "CAV", "VAV", "Oppvarming"];
 
   const renderOptions = (elements) =>

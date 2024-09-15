@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import { Box, Text, Table, Button, Flex, Grid, Space } from "@mantine/core";
 import { IconFileExport, IconDownload, IconFileCode } from "@tabler/icons-react";
 import * as XLSX from "xlsx";
@@ -14,6 +14,8 @@ import InfoIconTooltip from "../InfoIconTooltip/InfoIconTooltip.jsx";
 import { useSegments } from "../../contexts/SegmentsContext.jsx";
 
 import {
+  takOptions,
+  gulvOptions,
   yearsimOptions,
   internlasterOptions,
   oppvarmingOptions,
@@ -35,12 +37,20 @@ const horisotTooltipList = [
   "45 - 90 grader høyre",
 ];
 
-const SELECTED_ELEMENTS_OPTIONS = ["Tak", "Gulv", "CAV", "VAV", "Internlaster", "Oppvarming"];
+const SELECTED_ELEMENTS_OPTIONS = [
+  "Kombiner Sonekoblinger",
+  "Tak",
+  "Gulv",
+  "CAV",
+  "VAV",
+  "Internlaster",
+  "Oppvarming",
+];
 
 const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
   const { completedZones, updateSegment } = useSegments();
   const [selectedVarmelagring, setSelectedVarmelagring] = useState({});
-  const [selectedElements, setSelectedElements] = useState([]);
+  const [selectedElements, setSelectedElements] = useState(["Kombiner Sonekoblinger"]);
 
   const handleVarmelagringChange = (zoneId, segmentIndex, value) => {
     setSelectedVarmelagring((prev) => ({
@@ -149,6 +159,32 @@ const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
     </Box>
   );
 
+  /**
+   * Grupperer sonekoblinger basert på hvilke soner de kobler sammen.
+   *
+   * @param {Array} connections - Array av sonekoblinger-objekter.
+   * @param {number} currentZoneId - ID-en til den nåværende sonen som behandles.
+   * @returns {Object} Et objekt hvor nøklene er ID-ene til tilkoblede soner,
+   * og verdiene er arrays av koblinger til den respektive sonen.
+   */
+  const groupConnections = (connections, currentZoneId) => {
+    return connections.reduce((acc, connection) => {
+      // Bestem ID-en til den tilkoblede sonen (den som ikke er den nåværende sonen)
+      const facingZoneId =
+        connection.zoneId1 === currentZoneId ? connection.zoneId2 : connection.zoneId1;
+
+      // Hvis dette er den første koblingen til denne sonen, initialiser en tom array
+      if (!acc[facingZoneId]) {
+        acc[facingZoneId] = [];
+      }
+
+      // Legg til den nåværende koblingen i arrayen for den tilkoblede sonen
+      acc[facingZoneId].push(connection);
+
+      return acc;
+    }, {});
+  };
+
   const exportToXML = () => {
     const xml = create({ version: "1.0", encoding: "UTF-8", standalone: "yes" }).ele(
       "simien_project",
@@ -204,104 +240,98 @@ const ResultsTable = ({ angleAdjustment, onDownload, roofHeight }) => {
         });
       });
 
-      // Add zone connections
-      (zone.connections || []).forEach((connection) => {
-        const facingZoneId =
-          connection.zoneId1 === zone.id ? connection.zoneId2 : connection.zoneId1;
-        const facingZone = completedZones.find((z) => z.id === facingZoneId);
-        const facingZoneName = facingZone ? facingZone.name : `Sone ${facingZoneId}`;
+      if (selectedElements.includes("Kombiner Sonekoblinger")) {
+        // Grupperer alle tilkoblinger basert på hvilken sone de er koblet til
+        const groupedConnections = groupConnections(zone.connections || []);
 
-        zoneElement.ele("zone_connection", {
-          id: `sonekobling#${generateRandomNumber()}`,
-          name: `kobling ${facingZoneName} - ${zone.name}`,
-          comment: "",
-          measure_id: "",
-          area: (connection.segment.length * zone.roofHeight).toFixed(DECIMAL_POINTS_AREA),
-          uvalue: "0.25",
-          thermal_cap: "18.0",
-          construction: "Standard konstruksjon",
-          internal_layer: "Standard akkumulerende sjikt",
-          type: "vegg",
-          facing: `sone#${facingZoneId}`,
-          opening_area: "2.00",
-          opening_height: "2.00",
-          always_open: "false",
-          percent_open: "25.0",
-          start_opening: "6.00",
-          end_opening: "18.00",
-          infiltration: "25.0",
-          thermal_cap2: "18.0",
-          internal_layer2: "Standard akkumulerende sjikt",
+        Object.entries(groupedConnections).forEach(([facingZoneId, connections]) => {
+          const facingZone = completedZones.find((z) => z.id === Number(facingZoneId));
+          const facingZoneName = facingZone ? facingZone.name : `Sone ${facingZoneId}`;
+
+          const totalArea = connections.reduce(
+            (sum, connection) => sum + connection.segment.length * zone.roofHeight,
+            0
+          );
+
+          zoneElement.ele("zone_connection", {
+            id: `sonekobling#${generateRandomNumber()}`,
+            name: `kobling ${facingZoneName} - ${zone.name}`,
+            comment: "",
+            measure_id: "",
+            area: totalArea.toFixed(DECIMAL_POINTS_AREA),
+            uvalue: "0.25",
+            thermal_cap: "18.0",
+            construction: "Standard konstruksjon",
+            internal_layer: "Standard akkumulerende sjikt",
+            type: "vegg",
+            facing: `sone#${facingZoneId}`,
+            opening_area: "2.00",
+            opening_height: "2.00",
+            always_open: "false",
+            percent_open: "25.0",
+            start_opening: "6.00",
+            end_opening: "18.00",
+            infiltration: "25.0",
+            thermal_cap2: "18.0",
+            internal_layer2: "Standard akkumulerende sjikt",
+          });
         });
-      });
+      } else {
+        // Hvis vi ikke skal kombinere tilkoblinger, behandler vi hver tilkobling separat
+        (zone.connections || []).forEach((connection) => {
+          const facingZoneId =
+            connection.zoneId1 === zone.id ? connection.zoneId2 : connection.zoneId1;
+          const facingZone = completedZones.find((z) => z.id === facingZoneId);
+          const facingZoneName = facingZone ? facingZone.name : `Sone ${facingZoneId}`;
 
-      // Calculate total length of facades (excluding connections)
-      const totalFacadeLength = zone.segments.reduce((total, segment) => total + segment.length, 0);
-
-      // Add roof if selected
-      if (selectedElements.includes("Tak")) {
-        zoneElement.ele("roof", {
-          id: `tak#${generateRandomNumber()}`,
-          name: "Flatt Tak",
-          comment: "",
-          measure_id: "",
-          area: zone.area.toFixed(DECIMAL_POINTS_AREA),
-          uvalue: "0.20",
-          thermal_cap: "63.0",
-          construction: "Kompakttak m. 200-250 mm betong, 200 mm isolasjon",
-          internal_layer: "Tung himling",
-          direction: "0",
-          inclination: "0",
-          horizon_sector_w: "0",
-          horizon_sector_nw: "0",
-          horizon_sector_n: "0",
-          horizon_sector_ne: "0",
-          horizon_sector_e: "0",
-          horizon_sector_se: "0",
-          horizon_sector_s: "0",
-          horizon_sector_sw: "0",
-        });
-      }
-
-      // Add floor if selected
-      if (selectedElements.includes("Gulv")) {
-        zoneElement.ele("floor", {
-          id: `gulv#${generateRandomNumber()}`,
-          name: "Gulv på grunn",
-          comment: "",
-          measure_id: "",
-          area: zone.area.toFixed(DECIMAL_POINTS_AREA),
-          uvalue: "0.22",
-          thermal_cap: "63.0",
-          construction: "Betongdekke (200-250 mm), 150mm isolasjon (under)",
-          internal_layer: "Tungt gulv",
-          type: "grunn",
-          perimeter: totalFacadeLength.toFixed(DECIMAL_POINTS_LENGTH),
-          foundation: "0.30",
-          ground_condition: "Leire/silt",
-          ground_thermal_cond: "1.50",
-          ground_thermal_cap: "833.00",
-          edge_insulation_type: "vertikal",
-          edge_insulation_depth: "0.60",
-          edge_insulation_thickness: "5.00",
-          edge_insulation_product: "50 mm XPS (varmeledningsevne 0.034)",
-          edge_insulation_lambda: "0.034",
+          zoneElement.ele("zone_connection", {
+            id: `sonekobling#${generateRandomNumber()}`,
+            name: `kobling ${facingZoneName} - ${zone.name}`,
+            comment: "",
+            measure_id: "",
+            area: (connection.segment.length * zone.roofHeight).toFixed(DECIMAL_POINTS_AREA),
+            uvalue: "0.25",
+            thermal_cap: "18.0",
+            construction: "Standard konstruksjon",
+            internal_layer: "Standard akkumulerende sjikt",
+            type: "vegg",
+            facing: `sone#${facingZoneId}`,
+            opening_area: "2.00",
+            opening_height: "2.00",
+            always_open: "false",
+            percent_open: "25.0",
+            start_opening: "6.00",
+            end_opening: "18.00",
+            infiltration: "25.0",
+            thermal_cap2: "18.0",
+            internal_layer2: "Standard akkumulerende sjikt",
+          });
         });
       }
 
       // Add new elements based on selectedElements
+
+      // Add roof if selected
+      if (selectedElements.includes("Tak")) {
+        zoneElement.ele("roof", takOptions(zone));
+      }
+      // Add floor if selected
+      if (selectedElements.includes("Gulv")) {
+        zoneElement.ele("floor", gulvOptions(zone));
+      }
+      // Add CAV if selected
       if (selectedElements.includes("CAV")) {
         zoneElement.ele("ventilation", CAVOptions);
       }
-
+      // Add VAV if selected
       if (selectedElements.includes("VAV")) {
         zoneElement.ele("ventilation", VAVOptions);
       }
-
+      // Add internlaster if selected
       if (selectedElements.includes("Internlaster")) {
         zoneElement.ele("internal_gain", internlasterOptions);
       }
-
+      // Add heating if selected
       if (selectedElements.includes("Oppvarming")) {
         zoneElement.ele("heating", oppvarmingOptions);
       }

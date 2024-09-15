@@ -15,6 +15,7 @@ import {
   ColorInput,
   LoadingOverlay,
   useMantineTheme,
+  List,
 } from "@mantine/core";
 import { Dropzone, MIME_TYPES } from "@mantine/dropzone";
 import { useDisclosure } from "@mantine/hooks";
@@ -29,6 +30,7 @@ import("pdfjs-dist/build/pdf.worker.min.mjs").then(() => {
 import useNotifications from "../../hooks/useNotifications";
 import LineDrawer from "../LineDrawer";
 import ResultsTable from "../ResultsTable";
+import MergeXML from "../MergeXML";
 import styles from "./LineDrawerContainer.module.css";
 import { DEFAULT_COLORS, FILE_SIZE_THRESHOLD } from "../../constants/line-drawer-constants";
 import { generateRandomNumber } from "../../utils/misc";
@@ -42,6 +44,7 @@ const LineDrawerContainer = () => {
   const { showRedNotification } = useNotifications();
   // User inputs
   const [imageFile, setImageFile] = useState(null);
+  const [xmlFiles, setXmlFiles] = useState([]);
   const [metersPerPixel, setMetersPerPixel] = useState(0.15);
   const [roundAngleTo, setRoundAngleTo] = useState("90");
   const [roofHeight, setRoofHeight] = useState(2.7);
@@ -55,7 +58,6 @@ const LineDrawerContainer = () => {
   const [isCalibrationDone, setIsCalibrationDone] = useState(false);
   const [previousMetersPerPixel, setPreviousMetersPerPixel] = useState(null);
   const [knownMeasurement, setKnownMeasurement] = useState(1);
-
   // Zone state
   const { completedZones } = useSegments();
   const [activeZoneId, setActiveZoneId] = useState(1);
@@ -182,25 +184,35 @@ const LineDrawerContainer = () => {
   const handleFileDrop = async (files) => {
     if (files.length <= 0) return;
 
-    const file = files[0];
-    try {
-      let imageBlob;
-      let isPdf = false;
+    for (const file of files) {
+      try {
+        // Handle XML file
+        if (file.type === "text/xml") {
+          const xmlContent = await file.text();
+          setXmlFiles((prevFiles) => [...prevFiles, { name: file.name, content: xmlContent }]);
+          console.log("XML file uploaded:", file.name);
+          continue;
+        }
 
-      if (file.type === "application/pdf") {
-        console.log("PDF file detected:", file.name);
-        imageBlob = await convertPdfToImage(file);
-        isPdf = true;
-      } else {
-        imageBlob = file;
+        // Handle image or PDF file
+        let imageBlob;
+        let isPdf = false;
+
+        if (file.type === "application/pdf") {
+          console.log("PDF file detected:", file.name);
+          imageBlob = await convertPdfToImage(file);
+          isPdf = true;
+        } else {
+          imageBlob = file;
+        }
+
+        const imageUrl = URL.createObjectURL(imageBlob);
+        setImageFile({ file: imageBlob, url: imageUrl, isPdf, name: file.name });
+        console.log("ImageFile state updated:", file.name);
+      } catch (error) {
+        console.warn("Error processing file:", error);
+        showRedNotification(`Kunne ikke behandle filen ${file.name}.`, "Vennligst prøv igjen.");
       }
-
-      const imageUrl = URL.createObjectURL(imageBlob);
-      setImageFile({ file: imageBlob, url: imageUrl, isPdf, name: file.name });
-      console.log("ImageFile state updated");
-    } catch (error) {
-      console.warn("Error processing file:", error);
-      showRedNotification("Kunne ikke behandle filen.", "Vennligst prøv igjen.");
     }
   };
 
@@ -269,7 +281,13 @@ const LineDrawerContainer = () => {
         onDrop={handleFileDrop}
         onReject={handleFileReject}
         maxSize={10 * 1024 ** 2}
-        accept={[MIME_TYPES.pdf, MIME_TYPES.png, MIME_TYPES.jpeg]}
+        multiple={true}
+        accept={{
+          "application/pdf": [".pdf"],
+          "image/png": [".png"],
+          "image/jpeg": [".jpg", ".jpeg"],
+          "text/xml": [".xml"],
+        }}
         h={200}
         mt="md"
         mb="md"
@@ -316,6 +334,11 @@ const LineDrawerContainer = () => {
         />
         <Space h="lg" />
         <ImageDropZone />
+
+        {/* Section for merging XML files */}
+        {xmlFiles.length > 0 && (
+          <MergeXML files={xmlFiles} onMergeComplete={() => setXmlFiles([])} />
+        )}
 
         {/* Fieldset for kalibrering */}
         <Fieldset legend="Kalibrer Målestokk" mb="lg" className={styles.Fieldset}>

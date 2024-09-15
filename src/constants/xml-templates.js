@@ -1,4 +1,56 @@
 import { generateRandomNumber } from "../utils/misc";
+import { DECIMAL_POINTS_AREA, DECIMAL_POINTS_LENGTH } from "./results-table-constants";
+
+const takOptions = (zone) => {
+  return {
+    id: `tak#${generateRandomNumber()}`,
+    name: "Flatt Tak",
+    comment: "",
+    measure_id: "",
+    area: zone.area.toFixed(DECIMAL_POINTS_AREA),
+    uvalue: "0.20",
+    thermal_cap: "63.0",
+    construction: "Kompakttak m. 200-250 mm betong, 200 mm isolasjon",
+    internal_layer: "Tung himling",
+    direction: "0",
+    inclination: "0",
+    horizon_sector_w: "0",
+    horizon_sector_nw: "0",
+    horizon_sector_n: "0",
+    horizon_sector_ne: "0",
+    horizon_sector_e: "0",
+    horizon_sector_se: "0",
+    horizon_sector_s: "0",
+    horizon_sector_sw: "0",
+  };
+};
+
+const gulvOptions = (zone) => {
+  const totalFacadeLength = zone.segments.reduce((total, segment) => total + segment.length, 0);
+
+  return {
+    id: `gulv#${generateRandomNumber()}`,
+    name: "Gulv på grunn",
+    comment: "",
+    measure_id: "",
+    area: zone.area.toFixed(DECIMAL_POINTS_AREA),
+    uvalue: "0.22",
+    thermal_cap: "63.0",
+    construction: "Betongdekke (200-250 mm), 150mm isolasjon (under)",
+    internal_layer: "Tungt gulv",
+    type: "grunn",
+    perimeter: totalFacadeLength.toFixed(DECIMAL_POINTS_LENGTH),
+    foundation: "0.30",
+    ground_condition: "Leire/silt",
+    ground_thermal_cond: "1.50",
+    ground_thermal_cap: "833.00",
+    edge_insulation_type: "vertikal",
+    edge_insulation_depth: "0.60",
+    edge_insulation_thickness: "5.00",
+    edge_insulation_product: "50 mm XPS (varmeledningsevne 0.034)",
+    edge_insulation_lambda: "0.034",
+  };
+};
 
 const yearsimOptions = {
   id: "aarsim#31",
@@ -147,4 +199,12 @@ const CAVOptions = {
   norm_sfp_off: "1.50",
 };
 
-export { yearsimOptions, internlasterOptions, oppvarmingOptions, VAVOptions, CAVOptions };
+export {
+  takOptions,
+  gulvOptions,
+  yearsimOptions,
+  internlasterOptions,
+  oppvarmingOptions,
+  VAVOptions,
+  CAVOptions,
+};

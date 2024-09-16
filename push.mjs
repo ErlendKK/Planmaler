@@ -16,39 +16,28 @@ function hasChanges(directory) {
   return output.trim().length > 0;
 }
 
-// Function to add or remove /source from .gitignore
-function toggleSourceInGitignore(add) {
-  const gitignorePath = ".gitignore";
-  let content = fs.readFileSync(gitignorePath, "utf8");
-  const sourceEntry = "/source";
-
-  if (add && !content.includes(sourceEntry)) {
-    content += `\n${sourceEntry}`;
-  } else if (!add) {
-    content = content.replace(new RegExp(`^${sourceEntry}$`, "m"), "");
-  }
-
-  fs.writeFileSync(gitignorePath, content.trim() + "\n");
-}
-
 // Clear the staging area
 console.log("Clearing staging area...");
 runCommand("git reset");
 
 // Push to public repo
 console.log("Pushing to public repo...");
-toggleSourceInGitignore(true); // Add /source to .gitignore
+// Use .gitignore_public for the public repo push
+fs.renameSync(".gitignore", ".gitignore_temp");
+fs.renameSync(".gitignore_public", ".gitignore");
+
 runCommand("git add docs");
 runCommand('git commit -m "Update docs"');
 runCommand("git push origin main");
 
+// Restore original .gitignore
+fs.renameSync(".gitignore", ".gitignore_public");
+fs.renameSync(".gitignore_temp", ".gitignore");
+
 // Push to private repo
 console.log("Pushing to private repo...");
-toggleSourceInGitignore(false); // Remove /source from .gitignore
-
 runCommand("git add .");
 runCommand('git commit -m "Update all files including source"');
 runCommand("git push private main");
-runCommand("git reset");
 
 console.log("All operations completed successfully.");

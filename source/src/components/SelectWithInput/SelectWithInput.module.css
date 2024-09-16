@@ -1,0 +1,25 @@
+.root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  margin-left: auto;
+  height: 20px;
+  border: none;
+}
+
+.input {
+  border: none;
+  box-shadow: none;
+  width: 200px;
+  height: 15px;
+}
+
+.input:focus {
+  border: none;
+  outline: none;
+}
+
+.dropdown {
+  min-width: 250px;
+}

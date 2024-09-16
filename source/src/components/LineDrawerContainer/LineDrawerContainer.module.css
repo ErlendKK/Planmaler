@@ -1,0 +1,28 @@
+.LineDrawerContainer {
+  background-color: white;
+  border-radius: 10px;
+  overflow: hidden;
+  max-width: 2000px;
+}
+
+.Fieldset {
+  background-color: #f9f9f8;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.Fieldset legend {
+  font-weight: 630;
+  font-size: 16px;
+  color: var(--mantine-color-customPrimary-8);
+}
+
+.maxWidthContainer {
+  max-width: 400px;
+}
+
+.dropzone {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}

@@ -21,3 +21,4 @@ lager
 *.njsproj
 *.sln
 *.sw?
+/source

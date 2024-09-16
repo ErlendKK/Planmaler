@@ -31,6 +31,10 @@ function toggleSourceInGitignore(add) {
   fs.writeFileSync(gitignorePath, content.trim() + "\n");
 }
 
+// Clear the staging area
+console.log("Clearing staging area...");
+runCommand("git reset");
+
 // Push to public repo
 console.log("Pushing to public repo...");
 toggleSourceInGitignore(true); // Add /source to .gitignore
@@ -45,8 +49,6 @@ toggleSourceInGitignore(false); // Remove /source from .gitignore
 runCommand("git add .");
 runCommand('git commit -m "Update all files including source"');
 runCommand("git push private main");
-
-// Restore .gitignore
-toggleSourceInGitignore(true); // Add /source back to .gitignore
+runCommand("git reset");
 
 console.log("All operations completed successfully.");

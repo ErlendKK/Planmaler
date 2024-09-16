@@ -21,3 +21,6 @@ lager
 *.njsproj
 *.sln
 *.sw?
+
+# Production
+/docs

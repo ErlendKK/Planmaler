@@ -21,3 +21,5 @@ lager
 *.njsproj
 *.sln
 *.sw?
+
+push.mjs

@@ -1,4 +1,5 @@
 import { execSync } from "child_process";
+import fs from "fs";
 
 function runCommand(command) {
   try {
@@ -15,40 +16,25 @@ function hasChanges(directory) {
   return output.trim().length > 0;
 }
 
-// Clear the staging area
-console.log("Clearing staging area...");
-runCommand("git reset");
+// Push to public repo
+console.log("Pushing to public repo...");
+runCommand("git add docs");
+runCommand('git commit -m "Update docs"');
+runCommand("git push origin main");
 
-// Check and handle changes in 'docs' for public repo
-if (hasChanges("docs")) {
-  console.log("Staging changes in 'docs'...");
-  runCommand("git add docs");
+// Push to private repo
+console.log("Pushing to private repo...");
 
-  console.log("Committing changes in 'docs'...");
-  runCommand('git commit -m "Update docs"');
+// Temporarily rename .gitignore
+fs.renameSync(".gitignore", ".gitignore_temp");
+fs.renameSync(".gitignore_private", ".gitignore");
 
-  console.log("Pushing 'docs' to public repo...");
-  runCommand("git push origin main");
-} else {
-  console.log("No changes in 'docs' directory. Skipping public repo update.");
-}
+runCommand("git add .");
+runCommand('git commit -m "Update all files including source"');
+runCommand("git push private main");
 
-// Clear the staging area again
-console.log("Clearing staging area...");
-runCommand("git reset");
-
-// Check and handle all changes for private repo
-if (hasChanges(".")) {
-  console.log("Staging all changes for private repo...");
-  runCommand("git add .");
-
-  console.log("Committing all changes for private repo...");
-  runCommand('git commit -m "Update all files"');
-
-  console.log("Pushing all changes to private repo...");
-  runCommand("git push private main");
-} else {
-  console.log("No changes detected. Skipping private repo update.");
-}
+// Restore original .gitignore
+fs.renameSync(".gitignore", ".gitignore_private");
+fs.renameSync(".gitignore_temp", ".gitignore");
 
 console.log("All operations completed successfully.");
